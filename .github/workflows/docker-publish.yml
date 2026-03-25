@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: Build, Push and Deploy
 
 on:
   push:
@@ -8,6 +8,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  COMPOSE_FILE: /home/masy/Desktop/docker/homeserver/docker-compose.yml
 
 jobs:
   build-and-push:
@@ -43,3 +44,31 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  deploy:
+    needs: build-and-push
+    if: contains(github.event.head_commit.message, 'RELEASE')
+    runs-on: [self-hosted, homeserver]
+
+    steps:
+      - name: Pull new image
+        run: docker compose -f ${{ env.COMPOSE_FILE }} pull animeunity-downloader
+
+      - name: Recreate container
+        run: docker compose -f ${{ env.COMPOSE_FILE }} up -d animeunity-downloader
+
+      - name: Wait for health check
+        run: |
+          echo "Waiting for container to become healthy..."
+          for i in $(seq 1 20); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' animeunity-downloader 2>/dev/null || echo "starting")
+            echo "  Attempt $i/20: $STATUS"
+            if [ "$STATUS" = "healthy" ]; then
+              echo "Container is healthy!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "WARNING: Container did not become healthy within 100s"
+          docker logs --tail 20 animeunity-downloader
+          exit 1
