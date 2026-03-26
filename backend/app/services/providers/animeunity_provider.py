@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -104,11 +105,14 @@ class AnimeUnityProvider(SiteProvider):
     async def search(self, title: str) -> list[AnimeSearchResult]:
         all_results: dict[int, AnimeSearchResult] = {}
 
-        data = await self._post_archivio({"title": title, "offset": 0})
+        # Fetch SUB and DUB results in parallel
+        data, data_dub = await asyncio.gather(
+            self._post_archivio({"title": title, "offset": 0}),
+            self._post_archivio({"title": title, "offset": 0, "dubbed": True}),
+        )
+
         for item in self._extract_records(data):
             all_results[item.id] = item
-
-        data_dub = await self._post_archivio({"title": title, "offset": 0, "dubbed": True})
         for item in self._extract_records(data_dub):
             all_results[item.id] = item
 

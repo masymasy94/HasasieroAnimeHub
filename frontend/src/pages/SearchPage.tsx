@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { searchAnime, getLatestAnime } from '../api/search';
+import { streamSearch, getLatestAnime } from '../api/search';
 import { SearchBar } from '../components/SearchBar';
 import { AnimeCard } from '../components/AnimeCard';
+import type { AnimeSearchResult } from '../types/anime';
 
 const TYPE_FILTERS = ['Tutti', 'TV', 'Movie', 'OVA', 'ONA', 'Special'] as const;
 const DUB_FILTERS = ['Tutti', 'SUB', 'ITA'] as const;
@@ -11,16 +12,53 @@ const TYPE_ORDER: Record<string, number> = { TV: 0, Movie: 1, ONA: 2, OVA: 3, Sp
 
 export function SearchPage() {
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<AnimeSearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const [siteFilter, setSiteFilter] = useState<string>('Tutti');
   const [typeFilter, setTypeFilter] = useState<string>('Tutti');
   const [dubFilter, setDubFilter] = useState<string>('Tutti');
+  const abortRef = useRef<(() => void) | null>(null);
+
   const handleSearch = useCallback((q: string) => setQuery(q), []);
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['search', query],
-    queryFn: () => searchAnime(query),
-    enabled: query.length >= 2,
-  });
+  // Stream search: cancel previous, start new
+  useEffect(() => {
+    // Cancel any in-flight stream
+    abortRef.current?.();
+    abortRef.current = null;
+
+    if (query.length < 2) {
+      setResults([]);
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
+    setResults([]);
+    setIsLoading(true);
+    setError(null);
+
+    const abort = streamSearch(
+      query,
+      (_site, newResults) => {
+        setResults((prev) => [...prev, ...newResults]);
+      },
+      () => {
+        setIsLoading(false);
+      },
+      (err) => {
+        setError(err);
+        setIsLoading(false);
+      },
+    );
+
+    abortRef.current = abort;
+
+    return () => {
+      abort();
+    };
+  }, [query]);
 
   const { data: latestData } = useQuery({
     queryKey: ['latest'],
@@ -29,55 +67,55 @@ export function SearchPage() {
   });
 
   const filtered = useMemo(() => {
-    if (!data?.results) return [];
+    if (!results.length) return [];
 
-    let results = [...data.results];
+    let list = [...results];
 
     if (siteFilter !== 'Tutti') {
-      results = results.filter((a) => a.source_site === siteFilter);
+      list = list.filter((a) => a.source_site === siteFilter);
     }
 
     if (typeFilter !== 'Tutti') {
-      results = results.filter((a) => a.type === typeFilter);
+      list = list.filter((a) => a.type === typeFilter);
     }
 
     if (dubFilter === 'SUB') {
-      results = results.filter((a) => !a.dub);
+      list = list.filter((a) => !a.dub);
     } else if (dubFilter === 'ITA') {
-      results = results.filter((a) => a.dub);
+      list = list.filter((a) => a.dub);
     }
 
-    results.sort((a, b) => {
+    list.sort((a, b) => {
       const typeA = TYPE_ORDER[a.type ?? ''] ?? 99;
       const typeB = TYPE_ORDER[b.type ?? ''] ?? 99;
       if (typeA !== typeB) return typeA - typeB;
       return (b.year ?? '').localeCompare(a.year ?? '');
     });
 
-    return results;
-  }, [data, siteFilter, typeFilter, dubFilter]);
+    return list;
+  }, [results, siteFilter, typeFilter, dubFilter]);
 
   const siteCounts = useMemo(() => {
-    if (!data?.results) return {};
+    if (!results.length) return {};
     const counts: Record<string, number> = {};
-    for (const r of data.results) {
+    for (const r of results) {
       const s = r.source_site ?? 'animeunity';
       counts[s] = (counts[s] || 0) + 1;
     }
     return counts;
-  }, [data]);
+  }, [results]);
 
   const typeCounts = useMemo(() => {
-    if (!data?.results) return {};
+    if (!results.length) return {};
     const counts: Record<string, number> = {};
-    for (const r of data.results) {
+    for (const r of results) {
       const t = r.type ?? 'Altro';
       counts[t] = (counts[t] || 0) + 1;
     }
     return counts;
-  }, [data]);
+  }, [results]);
 
-  const hasResults = query.length >= 2 && data?.results && data.results.length > 0;
+  const hasResults = query.length >= 2 && results.length > 0;
   const showHero = !hasResults && !isLoading && !error;
 
   return (
@@ -133,7 +171,7 @@ export function SearchPage() {
 
       {error && (
         <div className="text-center py-8 text-error text-sm">
-          Errore nella ricerca: {(error as Error).message}
+          Errore nella ricerca: {error.message}
         </div>
       )}
 
@@ -171,7 +209,7 @@ export function SearchPage() {
             {/* Type filter */}
             <div className="flex gap-1">
               {TYPE_FILTERS.map((t) => {
-                const count = t === 'Tutti' ? data!.results.length : (typeCounts[t] || 0);
+                const count = t === 'Tutti' ? results.length : (typeCounts[t] || 0);
                 if (t !== 'Tutti' && count === 0) return null;
                 return (
                   <button
@@ -225,7 +263,7 @@ export function SearchPage() {
         </div>
       )}
 
-      {query.length >= 2 && !isLoading && data?.results?.length === 0 && (
+      {query.length >= 2 && !isLoading && results.length === 0 && (
         <div className="text-center py-12 text-text-secondary">
           Nessun risultato per "{query}"
         </div>
