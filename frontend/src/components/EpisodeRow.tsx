@@ -3,6 +3,7 @@ import type { Episode } from '../types/anime';
 interface EpisodeRowProps {
   episode: Episode;
   onDownload: (episode: Episode) => void;
+  onWatch?: (episode: Episode) => void;
   selectionMode: boolean;
   selected: boolean;
   onToggle: (episode: Episode) => void;
@@ -31,7 +32,7 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   cancelled: { label: 'Annullato', className: 'bg-text-secondary/20 text-text-secondary' },
 };
 
-export function EpisodeRow({ episode, onDownload, selectionMode, selected, onToggle }: EpisodeRowProps) {
+export function EpisodeRow({ episode, onDownload, onWatch, selectionMode, selected, onToggle }: EpisodeRowProps) {
   const status = episode.download_status
     ? STATUS_STYLES[episode.download_status]
     : null;
@@ -73,13 +74,23 @@ export function EpisodeRow({ episode, onDownload, selectionMode, selected, onTog
           </span>
         )}
       </div>
-      <button
-        onClick={() => onDownload(episode)}
-        disabled={!!episode.download_status && episode.download_status !== 'failed'}
-        className="px-3 py-1.5 text-xs font-medium rounded-[5px] bg-accent/10 text-accent hover:bg-accent hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-      >
-        {episode.download_status === 'failed' ? 'Riprova' : 'Scarica'}
-      </button>
+      <div className="flex gap-1.5 flex-shrink-0">
+        {onWatch && (
+          <button
+            onClick={() => onWatch(episode)}
+            className="px-3 py-1.5 text-xs font-medium rounded-[5px] bg-purple-500/10 text-purple-400 hover:bg-purple-500 hover:text-white transition-colors"
+          >
+            Guarda
+          </button>
+        )}
+        <button
+          onClick={() => onDownload(episode)}
+          disabled={!!episode.download_status && episode.download_status !== 'failed'}
+          className="px-3 py-1.5 text-xs font-medium rounded-[5px] bg-accent/10 text-accent hover:bg-accent hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          {episode.download_status === 'failed' ? 'Riprova' : 'Scarica'}
+        </button>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { getAnimeDetail, getEpisodes } from '../api/anime';
 import { startDownloads } from '../api/downloads';
 import { checkTrackedStatus, trackAnime, untrackAnime } from '../api/tracked';
 import { EpisodeList } from '../components/EpisodeList';
+import { VideoPlayer } from '../components/VideoPlayer';
 import type { Episode } from '../types/anime';
 
 export function AnimeDetailPage() {
@@ -13,6 +14,7 @@ export function AnimeDetailPage() {
   const site = searchParams.get('site') || 'animeunity';
   const queryClient = useQueryClient();
   const [episodeEnd, setEpisodeEnd] = useState(120);
+  const [streamInfo, setStreamInfo] = useState<{ url: string; type: 'mp4' | 'm3u8'; title: string } | null>(null);
 
   // Parse anime path
   const match = animePath?.match(/^(\d+)-(.+)$/);
@@ -167,6 +169,25 @@ export function AnimeDetailPage() {
     [anime, site, queryClient],
   );
 
+  const handleWatch = useCallback(
+    async (episode: Episode) => {
+      if (!anime) return;
+      try {
+        const resp = await fetch(`/api/stream/source/${episode.id}?site=${encodeURIComponent(site)}`);
+        if (!resp.ok) throw new Error('Impossibile ottenere lo stream');
+        const data = await resp.json();
+        setStreamInfo({
+          url: data.url,
+          type: data.type,
+          title: `${anime.title} — Ep. ${episode.number}`,
+        });
+      } catch (err) {
+        alert(`Errore streaming: ${(err as Error).message}`);
+      }
+    },
+    [anime, site],
+  );
+
   const handleLoadMore = useCallback(() => {
     setEpisodeEnd((prev) => prev + 120);
   }, []);
@@ -286,12 +307,23 @@ export function AnimeDetailPage() {
           hasMore={episodesData.has_more}
           onLoadMore={handleLoadMore}
           onDownload={handleDownload}
+          onWatch={handleWatch}
           onDownloadAll={handleDownloadAll}
           onDownloadRange={handleDownloadRange}
           onDownloadSelected={handleDownloadSelected}
           isLoadingMore={episodesFetching}
         />
       ) : null}
+
+      {/* Video Player Overlay */}
+      {streamInfo && (
+        <VideoPlayer
+          url={streamInfo.url}
+          type={streamInfo.type}
+          title={streamInfo.title}
+          onClose={() => setStreamInfo(null)}
+        />
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ interface EpisodeListProps {
   hasMore: boolean;
   onLoadMore: () => void;
   onDownload: (episode: Episode) => void;
+  onWatch?: (episode: Episode) => void;
   onDownloadAll: () => void;
   onDownloadRange: (from: number, to: number) => void;
   onDownloadSelected: (episodes: Episode[]) => void;
@@ -20,6 +21,7 @@ export function EpisodeList({
   hasMore,
   onLoadMore,
   onDownload,
+  onWatch,
   onDownloadAll,
   onDownloadRange,
   onDownloadSelected,
@@ -186,6 +188,7 @@ export function EpisodeList({
             key={ep.id}
             episode={ep}
             onDownload={onDownload}
+            onWatch={onWatch}
             selectionMode={selectionMode}
             selected={selectedIds.has(ep.id)}
             onToggle={toggleEpisode}
