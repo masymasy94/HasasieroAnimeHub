@@ -123,16 +123,22 @@ class AnimeWorldProvider(SiteProvider):
                 if isinstance(cat, dict):
                     genres.append(cat.get("name", ""))
 
+            ep_count = item.get("episodes")
+            try:
+                ep_count = int(ep_count) if ep_count is not None else None
+            except (ValueError, TypeError):
+                ep_count = None
+
             results.append(
                 AnimeSearchResult(
-                    id=item.get("id", 0),
+                    id=int(item.get("id", 0)),
                     slug=full_slug,
                     title=item.get("name", "Senza titolo"),
                     title_eng=item.get("jtitle"),
                     cover_url=item.get("image"),
                     type=item.get("type"),
                     year=item.get("year"),
-                    episodes_count=item.get("episodes"),
+                    episodes_count=ep_count,
                     genres=genres,
                     dub=item.get("dub") == "1" or item.get("language") == "it",
                 )
