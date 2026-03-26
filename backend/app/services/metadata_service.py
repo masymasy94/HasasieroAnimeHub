@@ -1,7 +1,6 @@
 import asyncio
-import json
 import logging
-import tempfile
+import uuid
 from pathlib import Path
 
 from .animeunity_client import AnimeUnityClient
@@ -39,7 +38,7 @@ class MetadataService:
             if cover_url:
                 cover_path = await self._download_cover(cover_url, input_path.parent)
 
-            # Build ffmpeg command
+            # Try with cover first, then without if it fails
             cmd = self._build_ffmpeg_cmd(
                 input_path=input_path,
                 output_path=output_path,
@@ -53,15 +52,26 @@ class MetadataService:
             )
 
             logger.info("Running ffmpeg for metadata: %s", " ".join(cmd))
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            _, stderr = await process.communicate()
+            ok = await self._run_ffmpeg(cmd)
 
-            if process.returncode != 0:
-                logger.error("ffmpeg failed: %s", stderr.decode(errors="replace"))
+            if not ok and cover_path:
+                # Retry without cover art (cover might be the issue)
+                logger.warning("ffmpeg failed with cover, retrying without cover art")
+                output_path.unlink(missing_ok=True)
+                cmd = self._build_ffmpeg_cmd(
+                    input_path=input_path,
+                    output_path=output_path,
+                    cover_path=None,
+                    title=title,
+                    show=show,
+                    episode_number=episode_number,
+                    genres=genres,
+                    year=year,
+                    description=description,
+                )
+                ok = await self._run_ffmpeg(cmd)
+
+            if not ok:
                 return False
 
             # Remove the raw input file
@@ -79,8 +89,22 @@ class MetadataService:
             if cover_path and cover_path.exists():
                 cover_path.unlink(missing_ok=True)
 
+    async def _run_ffmpeg(self, cmd: list[str]) -> bool:
+        """Execute an ffmpeg command. Returns True on success."""
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            logger.error("ffmpeg failed (rc=%d): %s", process.returncode, stderr.decode(errors="replace")[:500])
+            return False
+        return True
+
     async def _download_cover(self, cover_url: str, dest_dir: Path) -> Path | None:
-        """Download cover image to a unique temp file (avoids conflicts with concurrent downloads)."""
+        """Download cover image to a unique temp file."""
         try:
             session = await self._client._ensure_session()
             response = await session.get(cover_url)
@@ -95,8 +119,6 @@ class MetadataService:
             elif "webp" in content_type:
                 ext = ".webp"
 
-            # Use unique temp file per download to avoid concurrent write conflicts
-            import uuid
             cover_path = dest_dir / f".cover_{uuid.uuid4().hex[:8]}{ext}"
             cover_path.write_bytes(response.content)
             return cover_path
@@ -122,12 +144,13 @@ class MetadataService:
         if cover_path and cover_path.exists():
             cmd.extend(["-i", str(cover_path)])
             cmd.extend(["-map", "0", "-map", "1"])
+            # Copy audio/video streams, but re-encode cover as mjpeg
+            # (PNG/WebP codecs are not valid inside MP4 containers)
+            cmd.extend(["-c", "copy", "-c:v:1", "mjpeg"])
             cmd.extend(["-disposition:v:1", "attached_pic"])
         else:
             cmd.extend(["-map", "0"])
-
-        # Copy streams (no re-encoding)
-        cmd.extend(["-c", "copy"])
+            cmd.extend(["-c", "copy"])
 
         # Metadata
         cmd.extend(["-metadata", f"title={title}"])
@@ -145,9 +168,11 @@ class MetadataService:
         if year:
             cmd.extend(["-metadata", f"date={year}"])
         if description:
-            # Truncate very long descriptions
             desc = description[:1000] if len(description) > 1000 else description
             cmd.extend(["-metadata", f"description={desc}"])
+
+        # Optimize for streaming
+        cmd.extend(["-movflags", "+faststart"])
 
         cmd.append(str(output_path))
         return cmd

@@ -140,6 +140,7 @@ export function AnimeDetailPage() {
         episodes: downloadable.map((ep) => ({
           episode_id: ep.id,
           episode_number: ep.number,
+          episode_title: ep.title,
         })),
       });
       queryClient.invalidateQueries({ queryKey: ['episodes'] });
@@ -162,6 +163,7 @@ export function AnimeDetailPage() {
         episodes: selected.map((ep) => ({
           episode_id: ep.id,
           episode_number: ep.number,
+          episode_title: ep.title,
         })),
       });
       queryClient.invalidateQueries({ queryKey: ['episodes'] });

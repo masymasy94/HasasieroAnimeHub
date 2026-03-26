@@ -1,11 +1,12 @@
 import asyncio
 import json
 import logging
+import time
 
 from fastapi import APIRouter, Depends, Query
 from starlette.responses import StreamingResponse
 
-from ..schemas.anime import SearchResponse
+from ..schemas.anime import AnimeSearchResult, SearchResponse
 from ..services.providers import ProviderRegistry
 from .deps import get_provider_registry
 
@@ -14,6 +15,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 PROVIDER_TIMEOUT = 8  # seconds – skip slow providers instead of blocking everything
+
+# In-memory cache for /latest (avoids hitting providers on every page load)
+_latest_cache: list[AnimeSearchResult] | None = None
+_latest_cache_ts: float = 0.0
+_LATEST_CACHE_TTL = 600  # 10 minutes
 
 
 def _sse_event(event: str, data: dict | list) -> str:
@@ -68,7 +74,13 @@ async def search_anime(
 async def latest_anime(
     registry: ProviderRegistry = Depends(get_provider_registry),
 ):
-    """Get latest from all providers in parallel."""
+    """Get latest from all providers in parallel, with in-memory cache."""
+    global _latest_cache, _latest_cache_ts
+
+    now = time.monotonic()
+    if _latest_cache is not None and (now - _latest_cache_ts) < _LATEST_CACHE_TTL:
+        return SearchResponse(results=_latest_cache)
+
     providers = registry.all_providers()
 
     async def _latest_one(provider):
@@ -91,5 +103,8 @@ async def latest_anime(
     merged = []
     for results in all_results:
         merged.extend(results)
+
+    _latest_cache = merged
+    _latest_cache_ts = now
 
     return SearchResponse(results=merged)

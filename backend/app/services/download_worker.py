@@ -8,7 +8,7 @@ from pathlib import Path
 from .metadata_service import MetadataService
 from .providers import ProviderRegistry
 from .providers.base import VideoSource
-from ..utils.filename import episode_filename
+from ..utils.filename import episode_filename, extract_season
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +70,15 @@ class DownloadWorker:
             await self._download_m3u8(source, raw_path, progress_callback, provider)
 
         # Embed metadata
+        show_name, season = extract_season(anime_title)
+        meta_title = f"{show_name} - S{season:02d}E{episode_number}"
+        if episode_title:
+            meta_title += f" - {episode_title}"
         metadata_ok = await self._metadata.embed_metadata(
             input_path=raw_path,
             output_path=final_path,
-            title=f"{anime_title} - EP{episode_number}",
-            show=anime_title,
+            title=meta_title,
+            show=show_name,
             episode_number=episode_number,
             genres=genres,
             year=year,

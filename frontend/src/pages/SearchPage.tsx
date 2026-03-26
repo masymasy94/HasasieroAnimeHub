@@ -272,7 +272,7 @@ export function SearchPage() {
       {/* Latest / In onda ora */}
       {showHero && latestData?.results && latestData.results.length > 0 && (
         <div>
-          <h2 className="text-lg font-semibold text-text-white mb-4">In onda ora</h2>
+          <h2 className="text-lg font-semibold text-text-white mb-4">Ultime uscite</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {latestData.results.map((anime) => (
               <AnimeCard key={`${anime.source_site}-${anime.id}`} anime={anime} site={anime.source_site} />

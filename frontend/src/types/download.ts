@@ -5,6 +5,7 @@ export interface DownloadStatus {
   anime_slug: string;
   episode_id: number;
   episode_number: string;
+  episode_title: string | null;
   status: 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   downloaded_bytes: number;

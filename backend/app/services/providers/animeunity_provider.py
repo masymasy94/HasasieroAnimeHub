@@ -119,7 +119,12 @@ class AnimeUnityProvider(SiteProvider):
         return list(all_results.values())
 
     async def get_latest(self) -> list[AnimeSearchResult]:
-        data = await self._post_archivio({"title": "", "offset": 0, "status": "In Corso"})
+        data = await self._post_archivio({
+            "title": "",
+            "offset": 0,
+            "status": "In Corso",
+            "order": "Ultime aggiunte",
+        })
         return self._extract_records(data)
 
     def _extract_records(self, data: dict | list) -> list[AnimeSearchResult]:
