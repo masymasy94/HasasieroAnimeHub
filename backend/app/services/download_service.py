@@ -398,23 +398,8 @@ class DownloadService:
                 speed_bps: int,
                 progress: float,
             ):
-                # Use retry helper to avoid "database is locked" crashes
-                try:
-                    await _db_execute_with_retry(
-                        self._db,
-                        update(Download)
-                        .where(Download.id == dl_info["id"])
-                        .values(
-                            progress=progress,
-                            downloaded_bytes=downloaded_bytes,
-                            total_bytes=total_bytes,
-                            speed_bps=speed_bps,
-                        ),
-                    )
-                except Exception:
-                    # Progress update failure must not kill the download
-                    logger.debug("Progress DB update skipped (contention)")
-
+                # Progress is in-memory + WebSocket only — no DB writes
+                # This eliminates SQLite WAL contention during concurrent downloads
                 await self._ws.broadcast({
                     "type": "progress",
                     "download_id": dl_info["id"],
@@ -439,12 +424,29 @@ class DownloadService:
                 source_site=dl_info["source_site"],
             )
 
-            # Validate that the output file actually exists and is a real video
-            if not file_path.exists() or file_path.stat().st_size < 50 * 1024:
-                size = file_path.stat().st_size if file_path.exists() else 0
+            # Validate file exists and is a real video.
+            # os.sync + re-stat to bypass CIFS/NFS kernel cache that can report
+            # stale metadata on soft-mounted network shares.
+            import os
+            try:
+                os.sync()
+            except Exception:
+                pass
+            # Re-open and read first bytes to force a real I/O roundtrip
+            verified_size = 0
+            try:
+                with open(file_path, "rb") as f:
+                    header = f.read(8)  # force actual disk read
+                    f.seek(0, 2)  # seek to end
+                    verified_size = f.tell()
+            except OSError:
+                verified_size = 0
+
+            if verified_size < 50 * 1024:
                 file_path.unlink(missing_ok=True)
                 raise RuntimeError(
-                    f"Output file missing or too small ({size} bytes)"
+                    f"Output file missing or too small ({verified_size} bytes) — "
+                    f"network storage may have dropped writes"
                 )
 
             await _db_execute_with_retry(

@@ -80,7 +80,7 @@ class MetadataService:
                 cover_path.unlink(missing_ok=True)
 
     async def _download_cover(self, cover_url: str, dest_dir: Path) -> Path | None:
-        """Download cover image to a temp file."""
+        """Download cover image to a unique temp file (avoids conflicts with concurrent downloads)."""
         try:
             session = await self._client._ensure_session()
             response = await session.get(cover_url)
@@ -95,7 +95,9 @@ class MetadataService:
             elif "webp" in content_type:
                 ext = ".webp"
 
-            cover_path = dest_dir / f".cover_temp{ext}"
+            # Use unique temp file per download to avoid concurrent write conflicts
+            import uuid
+            cover_path = dest_dir / f".cover_{uuid.uuid4().hex[:8]}{ext}"
             cover_path.write_bytes(response.content)
             return cover_path
         except Exception as exc:

@@ -11,6 +11,7 @@ const TYPE_ORDER: Record<string, number> = { TV: 0, Movie: 1, ONA: 2, OVA: 3, Sp
 
 export function SearchPage() {
   const [query, setQuery] = useState('');
+  const [siteFilter, setSiteFilter] = useState<string>('Tutti');
   const [typeFilter, setTypeFilter] = useState<string>('Tutti');
   const [dubFilter, setDubFilter] = useState<string>('Tutti');
   const [genreFilter, setGenreFilter] = useState<string>('Tutti');
@@ -44,6 +45,10 @@ export function SearchPage() {
 
     let results = [...data.results];
 
+    if (siteFilter !== 'Tutti') {
+      results = results.filter((a) => a.source_site === siteFilter);
+    }
+
     if (typeFilter !== 'Tutti') {
       results = results.filter((a) => a.type === typeFilter);
     }
@@ -66,7 +71,17 @@ export function SearchPage() {
     });
 
     return results;
-  }, [data, typeFilter, dubFilter, genreFilter]);
+  }, [data, siteFilter, typeFilter, dubFilter, genreFilter]);
+
+  const siteCounts = useMemo(() => {
+    if (!data?.results) return {};
+    const counts: Record<string, number> = {};
+    for (const r of data.results) {
+      const s = r.source_site ?? 'animeunity';
+      counts[s] = (counts[s] || 0) + 1;
+    }
+    return counts;
+  }, [data]);
 
   const typeCounts = useMemo(() => {
     if (!data?.results) return {};
@@ -142,6 +157,36 @@ export function SearchPage() {
       {hasResults && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-4">
+            {/* Site filter */}
+            {Object.keys(siteCounts).length > 1 && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setSiteFilter('Tutti')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-[5px] transition-colors ${
+                    siteFilter === 'Tutti'
+                      ? 'bg-accent text-white'
+                      : 'bg-bg-secondary text-text-secondary hover:text-text-white border border-border'
+                  }`}
+                >
+                  Tutti <span className="ml-1 opacity-60">{data!.results.length}</span>
+                </button>
+                {Object.entries(siteCounts).map(([site, count]) => (
+                  <button
+                    key={site}
+                    onClick={() => setSiteFilter(site)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-[5px] transition-colors ${
+                      siteFilter === site
+                        ? 'bg-accent text-white'
+                        : 'bg-bg-secondary text-text-secondary hover:text-text-white border border-border'
+                    }`}
+                  >
+                    {site === 'animeunity' ? 'AnimeUnity' : site === 'animeworld' ? 'AnimeWorld' : site}
+                    <span className="ml-1 opacity-60">{count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Type filter */}
             <div className="flex gap-1">
               {TYPE_FILTERS.map((t) => {
