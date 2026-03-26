@@ -151,9 +151,9 @@ export function SearchPage() {
                     : 'bg-bg-secondary text-text-secondary hover:text-text-white border border-border'
                 }`}
               >
-                Tutti <span className="ml-1 opacity-60">{data!.results.length}</span>
+                Tutti
               </button>
-              {Object.entries(siteCounts).map(([site, count]) => (
+              {Object.entries(siteCounts).map(([site]) => (
                 <button
                   key={site}
                   onClick={() => setSiteFilter(site)}
@@ -163,8 +163,7 @@ export function SearchPage() {
                       : 'bg-bg-secondary text-text-secondary hover:text-text-white border border-border'
                   }`}
                 >
-                  {site === 'animeunity' ? 'AnimeUnity' : site === 'animeworld' ? 'AnimeWorld' : site}
-                  <span className="ml-1 opacity-60">{count}</span>
+                  {site === 'animeunity' ? 'AnimeUnity' : site === 'animeworld' ? 'AnimeWorld' : site === 'animesaturn' ? 'AnimeSaturn' : site}
                 </button>
               ))}
             </div>
@@ -185,7 +184,6 @@ export function SearchPage() {
                     }`}
                   >
                     {t}
-                    {count > 0 && <span className="ml-1 opacity-60">{count}</span>}
                   </button>
                 );
               })}
