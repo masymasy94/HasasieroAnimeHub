@@ -64,12 +64,28 @@ class AnimeSaturnProvider(SiteProvider):
         results = []
         for item in data if isinstance(data, list) else []:
             link = item.get("link", "")
-            # link is the slug, e.g. "Naruto-Shippuden"
             name = item.get("name", "Senza titolo")
             image = item.get("image", "")
 
-            # Generate a stable ID from the slug
             anime_id = abs(hash(link)) % 10_000_000
+
+            # Infer type from title
+            anime_type = "TV"
+            name_lower = name.lower()
+            for t in ("Movie", "OVA", "ONA", "Special"):
+                if t.lower() in name_lower:
+                    anime_type = t
+                    break
+
+            # Extract year from release date (e.g. "20 Ottobre 1999")
+            year = None
+            release = item.get("release", "")
+            year_match = re.search(r"(\d{4})", release)
+            if year_match:
+                year = year_match.group(1)
+
+            # Detect dub from title
+            dub = "(ita)" in name_lower
 
             results.append(
                 AnimeSearchResult(
@@ -77,6 +93,9 @@ class AnimeSaturnProvider(SiteProvider):
                     slug=link,
                     title=name,
                     cover_url=image or None,
+                    type=anime_type,
+                    year=year,
+                    dub=dub,
                     source_site="animesaturn",
                 )
             )
