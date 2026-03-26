@@ -136,7 +136,9 @@ class AnimeWorldProvider(SiteProvider):
                     title=item.get("name", "Senza titolo"),
                     title_eng=item.get("jtitle"),
                     cover_url=item.get("image"),
-                    type=item.get("type"),
+                    type={"Anime": "TV", "Serie": "TV"}.get(
+                        item.get("animeTypeName", ""), item.get("animeTypeName") or item.get("type"),
+                    ),
                     year=item.get("year"),
                     episodes_count=ep_count,
                     genres=genres,
