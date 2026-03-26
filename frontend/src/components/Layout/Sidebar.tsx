@@ -62,8 +62,8 @@ export function Sidebar() {
       <div className={`flex items-center ${collapsed ? 'justify-center p-3' : 'justify-between p-5'}`}>
         {!collapsed && (
           <div className="min-w-0">
-            <h1 className="text-lg font-bold text-accent truncate">AnimeUnity</h1>
-            <p className="text-[11px] text-text-secondary tracking-wide">DOWNLOADER</p>
+            <h1 className="text-lg font-bold text-accent truncate">AnimeHub</h1>
+            <p className="text-[11px] text-text-secondary tracking-wide">HASASIERO</p>
           </div>
         )}
         <button
