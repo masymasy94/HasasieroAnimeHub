@@ -121,7 +121,7 @@ export function SearchPage() {
             </h1>
             {showHero && (
               <p className="text-gray-300 text-sm drop-shadow">
-                Cerca, scarica e organizza i tuoi anime preferiti
+                Cerca, guarda e scarica da AnimeUnity, AnimeWorld e AnimeSaturn
               </p>
             )}
           </div>
