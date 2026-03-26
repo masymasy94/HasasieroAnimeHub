@@ -49,8 +49,13 @@ jobs:
     needs: build-and-push
     if: contains(github.event.head_commit.message, 'RELEASE')
     runs-on: [self-hosted, homeserver]
+    permissions:
+      packages: read
 
     steps:
+      - name: Log in to Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Pull new image
         run: docker compose -f ${{ env.COMPOSE_FILE }} pull animehub
 
