@@ -45,6 +45,10 @@ async def init_db() -> None:
             ("max_retries", "INTEGER NOT NULL DEFAULT 5"),
             ("source_site", "TEXT NOT NULL DEFAULT 'animeunity'"),
             ("episode_title", "TEXT"),
+            ("dest_folder_override", "TEXT"),
+            ("filename_template", "TEXT"),
+            ("filename_template_type", "TEXT"),
+            ("scheduled_download_id", "INTEGER"),
         ]:
             try:
                 await conn.execute(
