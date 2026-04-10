@@ -17,12 +17,6 @@ interface Props {
   onCancel: () => void;
 }
 
-const CRON_PRESETS: { label: string; expr: string }[] = [
-  { label: 'Ogni giorno 04:00', expr: '0 4 * * *' },
-  { label: 'Ogni 6 ore', expr: '0 */6 * * *' },
-  { label: 'Ogni domenica 22:00', expr: '0 22 * * 0' },
-];
-
 export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
   const [sites, setSites] = useState<{ id: string; name: string }[]>([]);
   const [siteId, setSiteId] = useState(initial?.source_site ?? '');
