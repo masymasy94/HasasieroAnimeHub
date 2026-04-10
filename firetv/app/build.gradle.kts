@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "com.hasasiero.tvstream"
-        minSdk = 28  // Fire OS 7+
+        minSdk = 21  // Fire OS 5+ (all Fire TV devices)
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"

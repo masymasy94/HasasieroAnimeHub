@@ -1,12 +1,11 @@
 package com.hasasiero.tvstream.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,19 +41,19 @@ fun ContentCard(
                         modifier = Modifier.fillMaxSize(),
                     )
                     if (subtitle != null) {
-                        Surface(
+                        Box(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(4.dp),
-                            colors = SurfaceDefaults.colors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                            ),
-                            shape = MaterialTheme.shapes.extraSmall,
+                                .padding(4.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.shapes.extraSmall,
+                                )
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
                         ) {
                             Text(
                                 text = subtitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
                             )
                         }
                     }

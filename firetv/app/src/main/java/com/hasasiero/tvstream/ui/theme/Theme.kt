@@ -16,7 +16,6 @@ private val TvColorScheme = darkColorScheme(
     onSurfaceVariant = TextSecondary,
     error = Error,
     onError = White,
-    border = Border,
 )
 
 @Composable

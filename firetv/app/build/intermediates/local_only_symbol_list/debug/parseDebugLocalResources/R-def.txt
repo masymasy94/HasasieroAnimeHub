@@ -1,0 +1,6 @@
+R_DEF: Internal format may change without notice
+local
+drawable banner
+drawable ic_launcher
+string app_name
+style Theme.TvStream
