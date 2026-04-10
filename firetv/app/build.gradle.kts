@@ -57,9 +57,7 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.core.ktx)
 
-    // Compose for TV
-    implementation(libs.tv.material)
-    // Standard Material3 for components not in tv-material (CircularProgressIndicator)
+    // Material3 — using standard M3 instead of tv-material for Fire OS compatibility
     implementation("androidx.compose.material3:material3")
 
     // Media3 (ExoPlayer)

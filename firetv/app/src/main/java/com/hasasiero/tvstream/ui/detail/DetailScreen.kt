@@ -14,7 +14,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.tv.material3.*
+import androidx.compose.material3.*
 import coil3.compose.AsyncImage
 import com.hasasiero.tvstream.domain.model.Episode
 import com.hasasiero.tvstream.ui.theme.BgPrimary
@@ -152,7 +152,7 @@ private fun EpisodeCard(
     animeTitle: String,
     onClick: () -> Unit,
 ) {
-    Card(
+    ElevatedCard(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
     ) {

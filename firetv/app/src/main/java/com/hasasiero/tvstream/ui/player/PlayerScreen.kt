@@ -23,8 +23,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.ui.PlayerView
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.tv.material3.*
+import androidx.compose.material3.*
 import kotlinx.coroutines.delay
 
 @OptIn(UnstableApi::class)

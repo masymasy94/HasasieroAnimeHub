@@ -1,28 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Dark background -->
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#0b1622" />
-            <size android:width="320dp" android:height="180dp" />
-        </shape>
-    </item>
-    <!-- Accent left bar -->
-    <item android:right="312dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#3db4f2" />
-        </shape>
-    </item>
-    <!-- Accent bottom bar -->
-    <item android:top="174dp">
-        <shape android:shape="rectangle">
-            <solid android:color="#3db4f2" />
-        </shape>
-    </item>
-    <!-- Center icon -->
-    <item
-        android:drawable="@drawable/ic_launcher"
-        android:gravity="center"
-        android:width="80dp"
-        android:height="80dp" />
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Background -->
+    <path android:fillColor="#0b1622" android:pathData="M0,0h320v180H0z" />
+    <!-- Accent circle -->
+    <path android:fillColor="#3db4f2"
+        android:pathData="M160,50 C182.09,50 200,67.91 200,90 C200,112.09 182.09,130 160,130 C137.91,130 120,112.09 120,90 C120,67.91 137.91,50 160,50z" />
+    <!-- Play triangle -->
+    <path android:fillColor="#0b1622"
+        android:pathData="M148,70 L148,110 L180,90 Z" />
+    <!-- Bottom accent line -->
+    <path android:fillColor="#3db4f2" android:pathData="M0,174h320v6H0z" />
+</vector>
