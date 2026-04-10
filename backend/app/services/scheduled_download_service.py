@@ -99,6 +99,7 @@ class ScheduledDownloadService:
 
     async def create(self, request: ScheduleCreate) -> ScheduledDownload:
         self._validate_dest_folder(request.dest_folder)
+        cron = await self.get_cron()
         async with self._db() as session:
             row = ScheduledDownload(
                 anime_id=request.anime_id,
@@ -109,6 +110,7 @@ class ScheduledDownloadService:
                 dest_folder=request.dest_folder,
                 filename_template=request.filename_template,
                 filename_template_type=request.filename_template_type,
+                cron_expr=cron,  # legacy column, NOT NULL in existing DBs
                 enabled=int(request.enabled),
             )
             session.add(row)
