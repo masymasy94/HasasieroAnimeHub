@@ -83,7 +83,10 @@ async def mkdir(request: MkdirRequest) -> BrowseResponse:
 
 
 @router.get("/filesystem/highest-episode")
-async def get_highest_episode(path: str = Query(default="")):
+async def get_highest_episode(
+    path: str = Query(default=""),
+    anime_title: str = Query(default=""),
+):
     base = _base()
     try:
         target = resolve_inside(base, path)
@@ -91,6 +94,19 @@ async def get_highest_episode(path: str = Query(default="")):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not target.exists() or not target.is_dir():
-        return {"highest_episode": 0}
+        return {"highest_episode": 0, "title_match": False}
 
-    return {"highest_episode": highest_episode(target)}
+    ep = highest_episode(target)
+
+    # Check if any video file in the folder contains the anime title
+    title_match = False
+    if anime_title:
+        needle = anime_title.lower()
+        from ..utils.episode_scanner import VIDEO_EXTENSIONS
+        for f in target.rglob("*"):
+            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                if needle in f.stem.lower():
+                    title_match = True
+                    break
+
+    return {"highest_episode": ep, "title_match": title_match}

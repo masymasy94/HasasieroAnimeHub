@@ -51,6 +51,7 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
   const [destFolder, setDestFolder] = useState(initial?.dest_folder ?? '');
   const [showBrowser, setShowBrowser] = useState(false);
   const [lastEpisode, setLastEpisode] = useState<number | null>(null);
+  const [titleMatch, setTitleMatch] = useState<boolean | null>(null);
 
   // Pattern state
   const [patternKind, setPatternKind] = useState<'preset' | 'custom'>(
@@ -74,22 +75,29 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Scan folder for highest existing episode when destFolder changes
+  // Scan folder for highest existing episode when destFolder or anime changes
   useEffect(() => {
     if (!destFolder) {
       setLastEpisode(null);
+      setTitleMatch(null);
       return;
     }
     let cancelled = false;
-    getHighestEpisode(destFolder)
+    getHighestEpisode(destFolder, selectedAnime?.title ?? '')
       .then((data) => {
-        if (!cancelled) setLastEpisode(data.highest_episode);
+        if (!cancelled) {
+          setLastEpisode(data.highest_episode);
+          setTitleMatch(data.title_match);
+        }
       })
       .catch(() => {
-        if (!cancelled) setLastEpisode(null);
+        if (!cancelled) {
+          setLastEpisode(null);
+          setTitleMatch(null);
+        }
       });
     return () => { cancelled = true; };
-  }, [destFolder]);
+  }, [destFolder, selectedAnime?.title]);
 
   // Load provider list
   useEffect(() => {
@@ -275,11 +283,18 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
               </button>
             </div>
             {destFolder && lastEpisode !== null && (
-              <div className="mt-1 text-[11px] text-text-secondary">
-                {lastEpisode > 0
-                  ? <>Ultimo episodio trovato: <span className="text-accent font-medium">{lastEpisode}</span> — il prossimo download partira dall'episodio {lastEpisode + 1}</>
-                  : <>Nessun episodio trovato nella cartella — il download partira dall'episodio 1</>
-                }
+              <div className="mt-1 space-y-1">
+                <div className="text-[11px] text-text-secondary">
+                  {lastEpisode > 0
+                    ? <>Ultimo episodio trovato: <span className="text-accent font-medium">{lastEpisode}</span> — il prossimo download partira dall'episodio {lastEpisode + 1}</>
+                    : <>Nessun episodio trovato nella cartella — il download partira dall'episodio 1</>
+                  }
+                </div>
+                {selectedAnime && titleMatch === false && lastEpisode > 0 && (
+                  <div className="text-[11px] text-warning bg-warning/10 px-2 py-1 rounded border border-warning/30">
+                    Attenzione: nessun file nella cartella contiene "{selectedAnime.title}" nel nome. Potrebbe non essere la cartella giusta per questa serie.
+                  </div>
+                )}
               </div>
             )}
           </div>

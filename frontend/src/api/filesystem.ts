@@ -6,9 +6,14 @@ export function browseFolder(path: string): Promise<BrowseResponse> {
   return apiFetch<BrowseResponse>(`/filesystem/browse?${params}`);
 }
 
-export function getHighestEpisode(path: string): Promise<{ highest_episode: number }> {
-  const params = new URLSearchParams({ path });
-  return apiFetch<{ highest_episode: number }>(`/filesystem/highest-episode?${params}`);
+export function getHighestEpisode(
+  path: string,
+  animeTitle = '',
+): Promise<{ highest_episode: number; title_match: boolean }> {
+  const params = new URLSearchParams({ path, anime_title: animeTitle });
+  return apiFetch<{ highest_episode: number; title_match: boolean }>(
+    `/filesystem/highest-episode?${params}`,
+  );
 }
 
 export function createFolder(
