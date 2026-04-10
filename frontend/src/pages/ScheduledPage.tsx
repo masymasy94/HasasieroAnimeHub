@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createSchedule,
@@ -259,9 +260,12 @@ export function ScheduledPage() {
               )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-medium text-text-white truncate">
+                  <Link
+                    to={`/anime/${s.anime_id}-${s.anime_slug}?site=${encodeURIComponent(s.source_site)}`}
+                    className="text-sm font-medium text-text-white truncate hover:text-accent transition-colors"
+                  >
                     {s.anime_title}
-                  </h3>
+                  </Link>
                   <span className="px-1.5 py-0.5 bg-accent/15 text-accent rounded text-[10px] font-medium flex-shrink-0">
                     EP {s.current_episode}
                   </span>
