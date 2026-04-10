@@ -41,7 +41,12 @@ export function ScheduledPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['scheduled'],
     queryFn: listSchedules,
-    refetchInterval: 30000,
+    refetchInterval: (query) => {
+      const hasActive = query.state.data?.scheduled?.some(
+        (s) => s.active_downloads.length > 0
+      );
+      return hasActive ? 3000 : 30000;
+    },
   });
 
   // Sync cron input from server on load
@@ -253,19 +258,54 @@ export function ScheduledPage() {
                 />
               )}
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-medium text-text-white truncate">
-                  {s.anime_title}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-text-white truncate">
+                    {s.anime_title}
+                  </h3>
+                  <span className="px-1.5 py-0.5 bg-accent/15 text-accent rounded text-[10px] font-medium flex-shrink-0">
+                    EP {s.current_episode}
+                  </span>
+                </div>
                 <div className="flex flex-wrap items-center gap-3 text-[11px] text-text-secondary mt-0.5">
                   <span className="px-1.5 py-0.5 bg-bg-card rounded text-[10px]">
                     {s.source_site}
                   </span>
-                  <span>Cartella: /downloads/{s.dest_folder}</span>
+                  <span>/downloads/{s.dest_folder}</span>
                   <span>Ultimo check: {formatDate(s.last_run_at)}</span>
                   {s.last_error && (
                     <span className="text-error">Errore: {s.last_error}</span>
                   )}
                 </div>
+                {s.active_downloads.length > 0 && (
+                  <div className="mt-1.5 space-y-1">
+                    {s.active_downloads.map((dl) => (
+                      <div key={dl.id} className="flex items-center gap-2">
+                        <span className="text-[10px] text-text-secondary w-10 flex-shrink-0">
+                          EP {dl.episode_number}
+                        </span>
+                        <div className="flex-1 h-1.5 bg-bg-card rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              dl.status === 'downloading' ? 'bg-accent' :
+                              dl.status === 'finalizing' ? 'bg-warning' : 'bg-text-secondary'
+                            }`}
+                            style={{ width: `${Math.min(dl.progress, 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] text-text-secondary w-12 text-right flex-shrink-0">
+                          {dl.status === 'queued' ? 'in coda' :
+                           dl.status === 'finalizing' ? 'finalizzando' :
+                           `${dl.progress.toFixed(0)}%`}
+                        </span>
+                        {dl.speed_bps > 0 && (
+                          <span className="text-[10px] text-text-secondary flex-shrink-0">
+                            {(dl.speed_bps / 1024 / 1024).toFixed(1)} MB/s
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button

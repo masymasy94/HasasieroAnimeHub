@@ -1,5 +1,13 @@
 export type PatternType = 'preset' | 'custom';
 
+export interface ActiveDownload {
+  id: number;
+  episode_number: string;
+  status: string;
+  progress: number;
+  speed_bps: number;
+}
+
 export interface ScheduledDownload {
   id: number;
   anime_id: number;
@@ -15,6 +23,8 @@ export interface ScheduledDownload {
   last_error: string | null;
   created_at: string;
   updated_at: string;
+  current_episode: number;
+  active_downloads: ActiveDownload[];
 }
 
 export interface ScheduleCreateRequest {

@@ -22,6 +22,14 @@ class ScheduleUpdate(BaseModel):
     enabled: bool | None = None
 
 
+class ActiveDownload(BaseModel):
+    id: int
+    episode_number: str
+    status: str
+    progress: float
+    speed_bps: int
+
+
 class ScheduleResponse(BaseModel):
     id: int
     anime_id: int
@@ -37,6 +45,8 @@ class ScheduleResponse(BaseModel):
     last_error: str | None
     created_at: datetime
     updated_at: datetime
+    current_episode: int = 0
+    active_downloads: list[ActiveDownload] = []
 
     model_config = {"from_attributes": True}
 

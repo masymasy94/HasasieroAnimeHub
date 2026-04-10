@@ -1,9 +1,15 @@
 from datetime import datetime
+from pathlib import Path
 
 from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from ..config import settings
+from ..models.download import Download
 from ..schemas.scheduled import (
+    ActiveDownload,
     CronUpdateRequest,
     CronValidationResponse,
     RunAllNowResponse,
@@ -14,9 +20,13 @@ from ..schemas.scheduled import (
     ScheduleUpdate,
 )
 from ..services.scheduled_download_service import ScheduledDownloadService
-from .deps import get_scheduled_download_service
+from ..utils.episode_scanner import highest_episode
+from ..utils.safe_path import resolve_inside
+from .deps import get_db_session_factory, get_scheduled_download_service
 
 router = APIRouter()
+
+_base_dir = Path(settings.download_dir)
 
 
 # ── Static routes MUST come before {schedule_id} to avoid path collision ──
@@ -24,12 +34,53 @@ router = APIRouter()
 @router.get("/scheduled", response_model=ScheduleListResponse)
 async def list_schedules(
     svc: ScheduledDownloadService = Depends(get_scheduled_download_service),
+    db_factory: async_sessionmaker = Depends(get_db_session_factory),
 ):
     rows = await svc.list_all()
     cron = await svc.get_cron()
     next_run = await svc.get_next_run()
+
+    # Gather current episode + active downloads per schedule
+    schedule_ids = [r.id for r in rows]
+    active_map: dict[int, list[ActiveDownload]] = {sid: [] for sid in schedule_ids}
+
+    if schedule_ids:
+        async with db_factory() as session:
+            result = await session.execute(
+                select(Download).where(
+                    Download.scheduled_download_id.in_(schedule_ids),
+                    Download.status.in_(["queued", "downloading", "finalizing"]),
+                )
+            )
+            for dl in result.scalars().all():
+                if dl.scheduled_download_id in active_map:
+                    active_map[dl.scheduled_download_id].append(
+                        ActiveDownload(
+                            id=dl.id,
+                            episode_number=dl.episode_number,
+                            status=dl.status,
+                            progress=dl.progress,
+                            speed_bps=dl.speed_bps,
+                        )
+                    )
+
+    responses = []
+    for r in rows:
+        # Compute current episode from disk
+        ep = 0
+        try:
+            dest = resolve_inside(_base_dir, r.dest_folder)
+            ep = highest_episode(dest)
+        except Exception:
+            pass
+
+        resp = _to_response(r)
+        resp.current_episode = ep
+        resp.active_downloads = active_map.get(r.id, [])
+        responses.append(resp)
+
     return ScheduleListResponse(
-        scheduled=[_to_response(r) for r in rows],
+        scheduled=responses,
         cron_expr=cron,
         next_run_at=next_run,
     )
