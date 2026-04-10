@@ -45,3 +45,16 @@ def test_recurses_into_season_subfolders(tmp_path: Path) -> None:
     season.mkdir()
     (season / "Show - S01E006.mp4").write_bytes(b"")
     assert highest_episode(tmp_path) == 6
+
+
+def test_underscore_ep_pattern(tmp_path: Path) -> None:
+    """Matches filenames like KoorinoJouheki_Ep_01_SUB_ITA.mp4"""
+    (tmp_path / "KoorinoJouheki_Ep_01_SUB_ITA.mp4").write_bytes(b"")
+    (tmp_path / "KoorinoJouheki_Ep_03_SUB_ITA.mp4").write_bytes(b"")
+    assert highest_episode(tmp_path) == 3
+
+
+def test_dot_separated_ep_pattern(tmp_path: Path) -> None:
+    """Matches filenames like Show.Ep.05.mp4"""
+    (tmp_path / "Show.Ep.05.mp4").write_bytes(b"")
+    assert highest_episode(tmp_path) == 5

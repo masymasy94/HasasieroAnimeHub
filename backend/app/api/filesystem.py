@@ -98,14 +98,20 @@ async def get_highest_episode(
 
     ep = highest_episode(target)
 
-    # Check if any video file in the folder contains the anime title
+    # Check if any video file in the folder contains the anime title.
+    # Normalize both sides: strip spaces, underscores, hyphens, dots
+    # so "Koori no Jouheki" matches "KoorinoJouheki_Ep_01_SUB_ITA".
+    import re
+    def _normalize(s: str) -> str:
+        return re.sub(r"[\s_.\-]+", "", s).lower()
+
     title_match = False
     if anime_title:
-        needle = anime_title.lower()
+        needle = _normalize(anime_title)
         from ..utils.episode_scanner import VIDEO_EXTENSIONS
         for f in target.rglob("*"):
             if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                if needle in f.stem.lower():
+                if needle in _normalize(f.stem):
                     title_match = True
                     break
 

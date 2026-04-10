@@ -9,7 +9,7 @@ VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
 #   "Show 10" / "Show - 10"       → captures 10
 #   "E10" / "EP10" / "Ep 10"      → captures 10
 _SE_RE = re.compile(r"[Ss]\d{1,2}[Ee](\d{1,4})")
-_EP_RE = re.compile(r"\b(?:[Ee][Pp]?|[Ee]pisodio)\s*(\d{1,4})\b")
+_EP_RE = re.compile(r"(?:[Ee][Pp]?|[Ee]pisodio)[\s_.-]*(\d{1,4})")
 _TRAILING_NUM_RE = re.compile(r"(\d{1,4})(?=\s*\.[^.]+$)")
 
 
