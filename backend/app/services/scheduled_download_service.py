@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..config import settings
 from ..models.scheduled_download import ScheduledDownload
+from ..models.setting import Setting
 from ..schemas.download import DownloadRequest, EpisodeDownloadRequest
 from ..schemas.scheduled import ScheduleCreate, ScheduleUpdate
 from ..utils.episode_scanner import highest_episode
@@ -22,6 +23,8 @@ from .providers import ProviderRegistry
 logger = logging.getLogger(__name__)
 
 CHECK_INTERVAL_SECONDS = 60
+DEFAULT_CRON = "0 4 * * *"
+SETTING_CRON_KEY = "scheduled_cron_expr"
 
 
 class ScheduledDownloadService:
@@ -36,6 +39,7 @@ class ScheduledDownloadService:
         self._download_service = download_service
         self._task: asyncio.Task | None = None
         self._base_dir = Path(settings.download_dir)
+        self._next_run_at: datetime | None = None
 
     # ── lifecycle ──
 
@@ -52,6 +56,34 @@ class ScheduledDownloadService:
                 pass
         logger.info("Scheduled download service stopped")
 
+    # ── global cron ──
+
+    async def get_cron(self) -> str:
+        async with self._db() as session:
+            setting = await session.get(Setting, SETTING_CRON_KEY)
+            return setting.value if setting else DEFAULT_CRON
+
+    async def set_cron(self, expr: str) -> str:
+        if not croniter.is_valid(expr):
+            raise ValueError(f"Invalid cron expression: {expr!r}")
+        async with self._db() as session:
+            setting = await session.get(Setting, SETTING_CRON_KEY)
+            if setting:
+                setting.value = expr
+            else:
+                session.add(Setting(key=SETTING_CRON_KEY, value=expr))
+            await session.commit()
+        # Recalculate next run
+        self._next_run_at = self._next_run(expr, datetime.now())
+        logger.info("Scheduled cron updated to %s, next run: %s", expr, self._next_run_at)
+        return expr
+
+    async def get_next_run(self) -> datetime | None:
+        if self._next_run_at is None:
+            cron = await self.get_cron()
+            self._next_run_at = self._next_run(cron, datetime.now())
+        return self._next_run_at
+
     # ── CRUD ──
 
     async def list_all(self) -> list[ScheduledDownload]:
@@ -66,7 +98,6 @@ class ScheduledDownloadService:
             return await session.get(ScheduledDownload, schedule_id)
 
     async def create(self, request: ScheduleCreate) -> ScheduledDownload:
-        self._validate_cron(request.cron_expr)
         self._validate_dest_folder(request.dest_folder)
         async with self._db() as session:
             row = ScheduledDownload(
@@ -78,9 +109,7 @@ class ScheduledDownloadService:
                 dest_folder=request.dest_folder,
                 filename_template=request.filename_template,
                 filename_template_type=request.filename_template_type,
-                cron_expr=request.cron_expr,
                 enabled=int(request.enabled),
-                next_run_at=self._next_run(request.cron_expr, datetime.now()),
             )
             session.add(row)
             await session.commit()
@@ -101,10 +130,6 @@ class ScheduledDownloadService:
                 row.filename_template = update.filename_template
             if update.filename_template_type is not None:
                 row.filename_template_type = update.filename_template_type
-            if update.cron_expr is not None:
-                self._validate_cron(update.cron_expr)
-                row.cron_expr = update.cron_expr
-                row.next_run_at = self._next_run(update.cron_expr, datetime.now())
             if update.enabled is not None:
                 row.enabled = int(update.enabled)
             row.updated_at = datetime.now()
@@ -123,11 +148,6 @@ class ScheduledDownloadService:
 
     # ── validation helpers ──
 
-    @staticmethod
-    def _validate_cron(expr: str) -> None:
-        if not croniter.is_valid(expr):
-            raise ValueError(f"Invalid cron expression: {expr!r}")
-
     def _validate_dest_folder(self, folder: str) -> None:
         try:
             resolve_inside(self._base_dir, folder)
@@ -141,7 +161,7 @@ class ScheduledDownloadService:
     # ── run loop ──
 
     async def _run_loop(self) -> None:
-        """Every minute, find schedules whose next_run_at has passed and run them."""
+        """Every minute, check if global cron time has passed and run all schedules."""
         while True:
             try:
                 await self._tick()
@@ -153,6 +173,17 @@ class ScheduledDownloadService:
 
     async def _tick(self) -> None:
         now = datetime.now()
+        cron = await self.get_cron()
+
+        if self._next_run_at is None:
+            self._next_run_at = self._next_run(cron, now)
+
+        if now < self._next_run_at:
+            return
+
+        logger.info("Scheduled cron triggered (%s), checking all schedules...", cron)
+
+        # Run all enabled schedules
         async with self._db() as session:
             result = await session.execute(
                 select(ScheduledDownload).where(ScheduledDownload.enabled == 1)
@@ -160,8 +191,6 @@ class ScheduledDownloadService:
             rows = list(result.scalars().all())
 
         for row in rows:
-            if row.next_run_at is not None and now < row.next_run_at:
-                continue
             try:
                 enqueued, reason = await self._execute(row.id)
                 logger.info(
@@ -178,13 +207,31 @@ class ScheduledDownloadService:
                     if fresh:
                         fresh.last_error = str(exc)
                         fresh.last_run_at = datetime.now()
-                        fresh.next_run_at = self._next_run(
-                            fresh.cron_expr, datetime.now()
-                        )
                         await session.commit()
+
+        # Advance to next run
+        self._next_run_at = self._next_run(cron, datetime.now())
+        logger.info("Next scheduled run: %s", self._next_run_at)
 
     async def run_now(self, schedule_id: int) -> tuple[int, str | None]:
         return await self._execute(schedule_id)
+
+    async def run_all_now(self) -> int:
+        """Trigger all enabled schedules immediately. Returns total enqueued."""
+        async with self._db() as session:
+            result = await session.execute(
+                select(ScheduledDownload).where(ScheduledDownload.enabled == 1)
+            )
+            rows = list(result.scalars().all())
+
+        total = 0
+        for row in rows:
+            try:
+                enqueued, _ = await self._execute(row.id)
+                total += enqueued
+            except Exception as exc:
+                logger.error("Schedule %d failed: %s", row.id, exc)
+        return total
 
     async def _execute(self, schedule_id: int) -> tuple[int, str | None]:
         """Run one schedule. Returns (enqueued_count, skipped_reason)."""
@@ -202,7 +249,6 @@ class ScheduledDownloadService:
                 "dest_folder": row.dest_folder,
                 "filename_template": row.filename_template,
                 "filename_template_type": row.filename_template_type,
-                "cron_expr": row.cron_expr,
             }
 
         # Determine highest episode already on disk.
@@ -262,6 +308,5 @@ class ScheduledDownloadService:
                 return
             row.last_run_at = datetime.now()
             row.last_error = error
-            row.next_run_at = self._next_run(row.cron_expr, datetime.now())
             row.updated_at = datetime.now()
             await session.commit()

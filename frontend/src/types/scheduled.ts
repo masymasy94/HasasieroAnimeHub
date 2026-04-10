@@ -10,10 +10,8 @@ export interface ScheduledDownload {
   dest_folder: string;
   filename_template: string;
   filename_template_type: PatternType;
-  cron_expr: string;
   enabled: boolean;
   last_run_at: string | null;
-  next_run_at: string | null;
   last_error: string | null;
   created_at: string;
   updated_at: string;
@@ -28,7 +26,6 @@ export interface ScheduleCreateRequest {
   dest_folder: string;
   filename_template: string;
   filename_template_type: PatternType;
-  cron_expr: string;
   enabled?: boolean;
 }
 
@@ -36,12 +33,13 @@ export interface ScheduleUpdateRequest {
   dest_folder?: string;
   filename_template?: string;
   filename_template_type?: PatternType;
-  cron_expr?: string;
   enabled?: boolean;
 }
 
 export interface ScheduleListResponse {
   scheduled: ScheduledDownload[];
+  cron_expr: string;
+  next_run_at: string | null;
 }
 
 export interface CronValidationResponse {

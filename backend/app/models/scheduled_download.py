@@ -25,11 +25,11 @@ class ScheduledDownload(Base):
     filename_template: Mapped[str] = mapped_column(Text, nullable=False)
     filename_template_type: Mapped[str] = mapped_column(Text, nullable=False)  # "preset" | "custom"
 
-    # Scheduling
-    cron_expr: Mapped[str] = mapped_column(Text, nullable=False)  # e.g. "0 4 * * *"
+    # Scheduling (cron is global, stored in settings table)
+    cron_expr: Mapped[str | None] = mapped_column(Text, nullable=True)  # legacy, unused
     enabled: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # legacy, unused
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

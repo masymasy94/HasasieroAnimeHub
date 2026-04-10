@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { getHighestEpisode } from '../api/filesystem';
-import { validateCron } from '../api/scheduled';
 import { streamSearch } from '../api/search';
 import { getSites } from '../api/sites';
 import type { AnimeSearchResult } from '../types/anime';
@@ -67,10 +66,6 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
   const [customTemplate, setCustomTemplate] = useState(
     initial?.filename_template_type === 'custom' ? initial.filename_template : '',
   );
-
-  const [cronExpr, setCronExpr] = useState(initial?.cron_expr ?? '0 4 * * *');
-  const [cronNexts, setCronNexts] = useState<string[]>([]);
-  const [cronError, setCronError] = useState<string | null>(null);
 
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [submitting, setSubmitting] = useState(false);
@@ -142,27 +137,8 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
     };
   }, [animeQuery, siteId, selectedAnime?.title]);
 
-  // Cron validation debounce
-  useEffect(() => {
-    if (!cronExpr) return;
-    const timer = setTimeout(() => {
-      validateCron(cronExpr)
-        .then((res) => {
-          if (res.valid) {
-            setCronError(null);
-            setCronNexts(res.next_runs);
-          } else {
-            setCronError(res.error || 'Cron non valido');
-            setCronNexts([]);
-          }
-        })
-        .catch((e) => setCronError((e as Error).message));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [cronExpr]);
-
   const handleSubmit = async () => {
-    if (!selectedAnime || !siteId || !destFolder || !cronExpr) return;
+    if (!selectedAnime || !siteId || !destFolder) return;
     setSubmitting(true);
     try {
       const template =
@@ -179,7 +155,6 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
         dest_folder: destFolder,
         filename_template: template,
         filename_template_type: patternType,
-        cron_expr: cronExpr,
         enabled,
       });
     } finally {
@@ -191,8 +166,6 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
     !!selectedAnime &&
     !!siteId &&
     !!destFolder &&
-    !!cronExpr &&
-    !cronError &&
     (patternKind === 'preset' || customTemplate.trim().length > 0);
 
   return (
@@ -334,39 +307,6 @@ export function ScheduleForm({ initial, onSubmit, onCancel }: Props) {
                 <div className="text-[11px] text-text-secondary">
                   Anteprima: {customTemplate ? `${customTemplate} 06.mp4` : '—'}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Cron */}
-          <div>
-            <label className="block text-[11px] text-text-secondary mb-1">
-              Orario (cron)
-            </label>
-            <input
-              value={cronExpr}
-              onChange={(e) => setCronExpr(e.target.value)}
-              placeholder="0 4 * * *"
-              className="w-full px-2 py-1.5 text-xs font-mono bg-bg-card border border-border rounded text-text-white"
-            />
-            <div className="mt-1 flex flex-wrap gap-1">
-              {CRON_PRESETS.map((p) => (
-                <button
-                  key={p.expr}
-                  onClick={() => setCronExpr(p.expr)}
-                  className="px-2 py-0.5 text-[10px] bg-bg-card border border-border rounded text-text-secondary hover:text-text-white"
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-            {cronError && (
-              <div className="mt-1 text-[11px] text-error">{cronError}</div>
-            )}
-            {!cronError && cronNexts.length > 0 && (
-              <div className="mt-1 text-[11px] text-text-secondary">
-                Prossime esecuzioni:{' '}
-                {cronNexts.map((t) => new Date(t).toLocaleString()).join(' · ')}
               </div>
             )}
           </div>

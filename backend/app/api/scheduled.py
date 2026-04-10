@@ -4,7 +4,9 @@ from croniter import croniter
 from fastapi import APIRouter, Depends, HTTPException
 
 from ..schemas.scheduled import (
+    CronUpdateRequest,
     CronValidationResponse,
+    RunAllNowResponse,
     RunNowResponse,
     ScheduleCreate,
     ScheduleListResponse,
@@ -22,8 +24,12 @@ async def list_schedules(
     svc: ScheduledDownloadService = Depends(get_scheduled_download_service),
 ):
     rows = await svc.list_all()
+    cron = await svc.get_cron()
+    next_run = await svc.get_next_run()
     return ScheduleListResponse(
-        scheduled=[_to_response(r) for r in rows]
+        scheduled=[_to_response(r) for r in rows],
+        cron_expr=cron,
+        next_run_at=next_run,
     )
 
 
@@ -73,6 +79,36 @@ async def run_now(
     return RunNowResponse(enqueued_episodes=enqueued, skipped_reason=reason)
 
 
+@router.post("/scheduled/run-all", response_model=RunAllNowResponse)
+async def run_all_now(
+    svc: ScheduledDownloadService = Depends(get_scheduled_download_service),
+):
+    total = await svc.run_all_now()
+    return RunAllNowResponse(total_enqueued=total)
+
+
+@router.get("/scheduled/cron")
+async def get_cron(
+    svc: ScheduledDownloadService = Depends(get_scheduled_download_service),
+):
+    cron = await svc.get_cron()
+    next_run = await svc.get_next_run()
+    return {"cron_expr": cron, "next_run_at": next_run}
+
+
+@router.put("/scheduled/cron")
+async def set_cron(
+    request: CronUpdateRequest,
+    svc: ScheduledDownloadService = Depends(get_scheduled_download_service),
+):
+    try:
+        expr = await svc.set_cron(request.cron_expr)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    next_run = await svc.get_next_run()
+    return {"cron_expr": expr, "next_run_at": next_run}
+
+
 @router.get("/scheduled/validate-cron", response_model=CronValidationResponse)
 async def validate_cron(expr: str):
     if not croniter.is_valid(expr):
@@ -94,10 +130,8 @@ def _to_response(row) -> ScheduleResponse:
         dest_folder=row.dest_folder,
         filename_template=row.filename_template,
         filename_template_type=row.filename_template_type,
-        cron_expr=row.cron_expr,
         enabled=bool(row.enabled),
         last_run_at=row.last_run_at,
-        next_run_at=row.next_run_at,
         last_error=row.last_error,
         created_at=row.created_at,
         updated_at=row.updated_at,

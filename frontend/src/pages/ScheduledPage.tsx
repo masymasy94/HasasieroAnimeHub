@@ -1,14 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createSchedule,
   deleteSchedule,
   listSchedules,
+  runAllNow,
   runScheduleNow,
+  setCron,
   updateSchedule,
+  validateCron,
 } from '../api/scheduled';
 import { ScheduleForm } from '../components/ScheduleForm';
 import type { ScheduleCreateRequest, ScheduledDownload } from '../types/scheduled';
+
+const CRON_PRESETS: { label: string; expr: string }[] = [
+  { label: 'Ogni giorno 04:00', expr: '0 4 * * *' },
+  { label: 'Ogni 6 ore', expr: '0 */6 * * *' },
+  { label: 'Ogni 12 ore', expr: '0 */12 * * *' },
+  { label: 'Ogni domenica 22:00', expr: '0 22 * * 0' },
+];
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—';
@@ -20,11 +30,49 @@ export function ScheduledPage() {
   const [editing, setEditing] = useState<ScheduledDownload | null>(null);
   const [showForm, setShowForm] = useState(false);
 
+  // Cron state
+  const [cronInput, setCronInput] = useState('');
+  const [cronValid, setCronValid] = useState(true);
+  const [cronNexts, setCronNexts] = useState<string[]>([]);
+  const [cronSaving, setCronSaving] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ['scheduled'],
     queryFn: listSchedules,
     refetchInterval: 30000,
   });
+
+  // Sync cron input from server
+  useEffect(() => {
+    if (data?.cron_expr && cronInput === '') {
+      setCronInput(data.cron_expr);
+    }
+  }, [data?.cron_expr]);
+
+  // Validate cron debounce
+  useEffect(() => {
+    if (!cronInput) return;
+    const timer = setTimeout(() => {
+      validateCron(cronInput)
+        .then((res) => {
+          setCronValid(res.valid);
+          setCronNexts(res.valid ? res.next_runs : []);
+        })
+        .catch(() => setCronValid(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [cronInput]);
+
+  const handleSaveCron = async () => {
+    if (!cronValid || !cronInput) return;
+    setCronSaving(true);
+    try {
+      await setCron(cronInput);
+      queryClient.invalidateQueries({ queryKey: ['scheduled'] });
+    } finally {
+      setCronSaving(false);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: createSchedule,
@@ -56,6 +104,14 @@ export function ScheduledPage() {
     },
   });
 
+  const runAllMutation = useMutation({
+    mutationFn: runAllNow,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scheduled'] });
+      queryClient.invalidateQueries({ queryKey: ['downloads'] });
+    },
+  });
+
   const toggleMutation = useMutation({
     mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
       updateSchedule(id, { enabled }),
@@ -71,17 +127,75 @@ export function ScheduledPage() {
   }
 
   const schedules = data?.scheduled ?? [];
+  const cronChanged = data?.cron_expr !== cronInput;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text-white">Download Programmati</h1>
-        <button
-          onClick={() => setShowForm(true)}
-          className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-[5px]"
-        >
-          + Nuovo
-        </button>
+        <div className="flex items-center gap-2">
+          {schedules.length > 0 && (
+            <button
+              onClick={() => runAllMutation.mutate()}
+              disabled={runAllMutation.isPending}
+              className="px-3 py-1.5 text-xs font-medium rounded-[5px] bg-accent/10 text-accent hover:bg-accent hover:text-white disabled:opacity-50"
+            >
+              Esegui tutti ora
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm(true)}
+            className="px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-[5px]"
+          >
+            + Nuovo
+          </button>
+        </div>
+      </div>
+
+      {/* Global cron config */}
+      <div className="bg-bg-secondary border border-border rounded-[5px] p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] text-text-secondary whitespace-nowrap">Controllo automatico (cron):</label>
+          <input
+            value={cronInput}
+            onChange={(e) => setCronInput(e.target.value)}
+            className={`w-40 px-2 py-1 text-xs font-mono bg-bg-card border rounded text-text-white ${
+              cronValid ? 'border-border' : 'border-error'
+            }`}
+          />
+          {cronChanged && cronValid && (
+            <button
+              onClick={handleSaveCron}
+              disabled={cronSaving}
+              className="px-2 py-1 text-[11px] bg-accent text-white rounded disabled:opacity-50"
+            >
+              {cronSaving ? 'Salvo...' : 'Salva'}
+            </button>
+          )}
+          <span className="text-[11px] text-text-secondary">
+            Prossimo: {formatDate(data?.next_run_at ?? null)}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {CRON_PRESETS.map((p) => (
+            <button
+              key={p.expr}
+              onClick={() => setCronInput(p.expr)}
+              className={`px-2 py-0.5 text-[10px] rounded border ${
+                cronInput === p.expr
+                  ? 'bg-accent/15 border-accent/30 text-accent'
+                  : 'bg-bg-card border-border text-text-secondary hover:text-text-white'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {cronValid && cronNexts.length > 0 && (
+          <div className="text-[10px] text-text-secondary">
+            Prossime esecuzioni: {cronNexts.map((t) => new Date(t).toLocaleString()).join(' · ')}
+          </div>
+        )}
       </div>
 
       {schedules.length === 0 ? (
@@ -114,8 +228,7 @@ export function ScheduledPage() {
                     {s.source_site}
                   </span>
                   <span>Cartella: /downloads/{s.dest_folder}</span>
-                  <span>Cron: <code>{s.cron_expr}</code></span>
-                  <span>Prossimo: {formatDate(s.next_run_at)}</span>
+                  <span>Ultimo check: {formatDate(s.last_run_at)}</span>
                   {s.last_error && (
                     <span className="text-error">Errore: {s.last_error}</span>
                   )}
