@@ -52,6 +52,9 @@ class DownloadWorker:
         total_episodes: int = 100,
         source_site: str = "animeunity",
         episode_title: str | None = None,
+        dest_folder_override: str | None = None,
+        filename_template: str | None = None,
+        filename_template_type: str | None = None,
     ) -> Path:
         """
         Download a single episode:
@@ -59,14 +62,45 @@ class DownloadWorker:
         2. Download MP4
         3. Embed metadata
         Returns the final file path.
+
+        When `dest_folder_override` + `filename_template` + `filename_template_type`
+        are all supplied, the file is written under
+        ``download_dir / dest_folder_override / rendered_filename`` instead of
+        the Plex-style ``Show/Season NN/...`` layout.
         """
+        from ..utils.pattern import PatternInputs, render_filename
+
         # Resolve video URL just-in-time via the appropriate site provider
         provider = self._registry.get(source_site)
         source = await provider.resolve_download_url(episode_id)
 
         # Determine file path
-        relative_path = episode_filename(anime_title, episode_number, total_episodes, episode_title)
-        final_path = download_dir / relative_path
+        use_override = (
+            dest_folder_override is not None
+            and filename_template is not None
+            and filename_template_type is not None
+        )
+        if use_override:
+            show_name, season = extract_season(anime_title)
+            rendered = render_filename(
+                template=filename_template,
+                template_type=filename_template_type,
+                inputs=PatternInputs(
+                    anime_title=show_name,
+                    season=season,
+                    episode_number=episode_number,
+                    episode_title=episode_title,
+                    total_episodes=total_episodes,
+                    extension="mp4",
+                ),
+            )
+            rel_folder = dest_folder_override.lstrip("/")
+            final_path = download_dir / rel_folder / rendered
+        else:
+            relative_path = episode_filename(
+                anime_title, episode_number, total_episodes, episode_title
+            )
+            final_path = download_dir / relative_path
         final_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Download based on source type
