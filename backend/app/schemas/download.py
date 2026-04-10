@@ -19,6 +19,11 @@ class DownloadRequest(BaseModel):
     year: str | None = None
     source_site: str = "animeunity"
     episodes: list[EpisodeDownloadRequest]
+    # Optional overrides used by scheduled downloads
+    dest_folder_override: str | None = None
+    filename_template: str | None = None
+    filename_template_type: str | None = None
+    scheduled_download_id: int | None = None
 
 
 class DownloadStatus(BaseModel):

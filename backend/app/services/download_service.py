@@ -148,6 +148,10 @@ class DownloadService:
                     episode_number=ep.episode_number,
                     episode_title=ep.episode_title,
                     status="queued",
+                    dest_folder_override=request.dest_folder_override,
+                    filename_template=request.filename_template,
+                    filename_template_type=request.filename_template_type,
+                    scheduled_download_id=request.scheduled_download_id,
                 )
                 session.add(download)
                 try:
@@ -401,6 +405,9 @@ class DownloadService:
                 "year": download.year,
                 "retry_count": download.retry_count or 0,
                 "source_site": download.source_site,
+                "dest_folder_override": download.dest_folder_override,
+                "filename_template": download.filename_template,
+                "filename_template_type": download.filename_template_type,
             }
 
         await self._ws.broadcast({
@@ -439,6 +446,9 @@ class DownloadService:
                 plot=dl_info["plot"],
                 year=dl_info["year"],
                 source_site=dl_info["source_site"],
+                dest_folder_override=dl_info["dest_folder_override"],
+                filename_template=dl_info["filename_template"],
+                filename_template_type=dl_info["filename_template_type"],
             )
 
             # --- Validate file locally (fast, no NAS) ---
