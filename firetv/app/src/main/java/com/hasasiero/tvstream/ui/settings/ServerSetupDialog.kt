@@ -13,8 +13,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.hasasiero.tvstream.ui.theme.*
@@ -26,6 +29,10 @@ fun ServerSetupDialog(
 ) {
     var url by remember { mutableStateOf(currentUrl) }
     var buttonFocused by remember { mutableStateOf(false) }
+    var editingUrl by remember { mutableStateOf(false) }
+    var urlFocused by remember { mutableStateOf(false) }
+    val urlFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     Box(
         modifier = Modifier
@@ -60,34 +67,65 @@ fun ServerSetupDialog(
             )
             Spacer(Modifier.height(12.dp))
 
-            BasicTextField(
-                value = url,
-                onValueChange = { url = it },
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextWhite),
-                cursorBrush = SolidColor(Accent),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    if (url.isNotBlank()) onConfirm(url.trimEnd('/'))
-                }),
-                decorationBox = { inner ->
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(BgCard, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                    ) {
-                        if (url.isEmpty()) {
-                            Text(
-                                "http://192.168.x.x:8010",
-                                color = TextSecondary,
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
+            if (editingUrl) {
+                BasicTextField(
+                    value = url,
+                    onValueChange = { url = it },
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextWhite),
+                    cursorBrush = SolidColor(Accent),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        keyboardController?.hide()
+                        editingUrl = false
+                    }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(urlFocusRequester),
+                    decorationBox = { inner ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(BgCard, RoundedCornerShape(8.dp))
+                                .border(2.dp, Accent, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                        ) {
+                            if (url.isEmpty()) {
+                                Text(
+                                    "http://192.168.x.x:8010",
+                                    color = TextSecondary,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                )
+                            }
+                            inner()
                         }
-                        inner()
-                    }
-                },
-            )
+                    },
+                )
+                LaunchedEffect(Unit) {
+                    urlFocusRequester.requestFocus()
+                    keyboardController?.show()
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(BgCard, RoundedCornerShape(8.dp))
+                        .then(
+                            if (urlFocused) Modifier.border(2.dp, Accent, RoundedCornerShape(8.dp))
+                            else Modifier
+                        )
+                        .onFocusChanged { urlFocused = it.isFocused }
+                        .focusable()
+                        .clickable { editingUrl = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Text(
+                        if (url.isEmpty()) "http://192.168.x.x:8010" else url,
+                        color = if (url.isEmpty()) TextSecondary else TextWhite,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+            }
 
             Spacer(Modifier.height(8.dp))
             Text(
@@ -114,7 +152,10 @@ fun ServerSetupDialog(
                     .onFocusChanged { buttonFocused = it.isFocused }
                     .focusable()
                     .clickable {
-                        if (url.isNotBlank()) onConfirm(url.trimEnd('/'))
+                        if (url.isNotBlank()) {
+                            keyboardController?.hide()
+                            onConfirm(url.trimEnd('/'))
+                        }
                     },
                 contentAlignment = Alignment.Center,
             ) {

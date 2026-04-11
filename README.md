@@ -32,6 +32,9 @@ Download single episodes, custom ranges, or entire series. Files are organized a
 ### Series Tracking
 Follow ongoing series and automatically get notified of new episodes. Tracked anime are checked periodically for new releases.
 
+### Fire TV Companion App
+Native Android TV app (`firetv/`) built with Jetpack Compose and Media3/ExoPlayer. Browse tracked series, resume playback with Continue Watching, and stream episodes on the big screen with a Plex-style player overlay optimized for D-pad navigation.
+
 ### More
 - **Real-time progress** via WebSocket (speed, ETA, status)
 - **Queue management** with configurable concurrency (1-5 parallel downloads)
@@ -135,6 +138,7 @@ docker compose up -d --build
 |---|---|
 | **Backend** | Python 3.12, FastAPI, SQLAlchemy 2.0 (async), curl-cffi, BeautifulSoup4, httpx |
 | **Frontend** | React 19, TypeScript, Vite 8, Tailwind CSS 4, TanStack Query 5, hls.js |
+| **Fire TV App** | Kotlin, Jetpack Compose, Media3 ExoPlayer, Hilt, Navigation Compose |
 | **Infrastructure** | Docker (multi-stage build), SQLite (WAL), ffmpeg |
 
 ---
@@ -142,31 +146,31 @@ docker compose up -d --build
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                       Browser                             │
 │   React 19 + hls.js + TanStack Query + Tailwind CSS       │
 └────────────┬──────────────────────┬───────────────────────┘
              │ REST API             │ WebSocket
              ▼                      ▼
 ┌──────────────────────────────────────────────────────────┐
-│                    FastAPI (Uvicorn)                      │
+│                    FastAPI (Uvicorn)                     │
 │                                                          │
 │  ┌────────────────────────────────────────────────────┐  │
 │  │              Provider Registry                     │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌───────────────┐      │  │
-│  │  │AnimeUnity│ │AnimeWorld│ │ AnimeSaturn   │      │  │
-│  │  └──────────┘ └──────────┘ └───────────────┘      │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌───────────────┐       │  │
+│  │  │AnimeUnity│ │AnimeWorld│ │ AnimeSaturn   │       │  │
+│  │  └──────────┘ └──────────┘ └───────────────┘       │  │
 │  └────────────────────────────────────────────────────┘  │
 │                                                          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │
-│  │ Search   │ │ Download │ │ Stream   │ │ Tracker  │   │
-│  │ Service  │ │ Service  │ │ Proxy    │ │ Service  │   │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐     │
+│  │ Search   │ │ Download │ │ Stream   │ │ Tracker  │     │
+│  │ Service  │ │ Service  │ │ Proxy    │ │ Service  │     │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘     │
 │                                                          │
-│  ┌──────────────────────┐  ┌───────────────────────┐    │
-│  │  Metadata Service    │  │   SQLite (aiosqlite)  │    │
-│  │  (ffmpeg embed)      │  │   via SQLAlchemy ORM  │    │
-│  └──────────────────────┘  └───────────────────────┘    │
+│  ┌──────────────────────┐  ┌───────────────────────┐     │
+│  │  Metadata Service    │  │   SQLite (aiosqlite)  │     │
+│  │  (ffmpeg embed)      │  │   via SQLAlchemy ORM  │     │
+│  └──────────────────────┘  └───────────────────────┘     │
 └──────────────────────────────────────────────────────────┘
 ```
 

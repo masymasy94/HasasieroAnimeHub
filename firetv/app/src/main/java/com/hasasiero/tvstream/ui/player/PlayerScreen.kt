@@ -1,5 +1,8 @@
 package com.hasasiero.tvstream.ui.player
 
+import android.app.Activity
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -13,6 +16,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -46,8 +51,25 @@ fun PlayerScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val view = LocalView.current
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Force-dismiss the soft keyboard on entry in case a previous screen
+    // (search field) left it attached. LocalSoftwareKeyboardController alone
+    // is insufficient when the previous TextField still owns the IME session,
+    // so we also fall back to InputMethodManager + clear the focused view.
+    LaunchedEffect(Unit) {
+        keyboardController?.hide()
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        val window = (context as? Activity)?.window
+        val token = window?.currentFocus?.windowToken ?: view.windowToken
+        if (token != null) {
+            imm?.hideSoftInputFromWindow(token, 0)
+        }
+        window?.currentFocus?.clearFocus()
+    }
 
     // Overlay visibility
     var showOverlay by remember { mutableStateOf(true) }

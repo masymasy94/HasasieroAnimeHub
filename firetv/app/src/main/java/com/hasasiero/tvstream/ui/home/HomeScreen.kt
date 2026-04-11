@@ -1,5 +1,8 @@
 package com.hasasiero.tvstream.ui.home
 
+import android.app.Activity
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,8 +20,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -41,6 +46,32 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val context = LocalContext.current
+    val view = LocalView.current
+
+    // Force-close the IME before navigating away. Compose's keyboardController
+    // alone isn't enough when a BasicTextField still owns the IME session, so
+    // we also drop the InputMethodManager binding and clear the focused view.
+    val forceHideKeyboard = {
+        keyboardController?.hide()
+        val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        val window = (context as? Activity)?.window
+        val token = window?.currentFocus?.windowToken ?: view.windowToken
+        if (token != null) imm?.hideSoftInputFromWindow(token, 0)
+        window?.currentFocus?.clearFocus()
+    }
+
+    // Wrap navigation callbacks to always dismiss the IME before leaving,
+    // so the keyboard never lingers over DetailScreen / PlayerScreen.
+    val handleAnimeClick: (AnimeSearchResult) -> Unit = { anime ->
+        forceHideKeyboard()
+        onAnimeClick(anime)
+    }
+    val handleContinueWatching: (WatchHistoryEntry) -> Unit = { entry ->
+        forceHideKeyboard()
+        onContinueWatching(entry)
+    }
 
     // Refresh watch history every time this screen becomes visible
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -109,7 +140,6 @@ fun HomeScreen(
                             var searchActive by remember { mutableStateOf(false) }
                             var searchFocused by remember { mutableStateOf(false) }
                             val searchFocusRequester = remember { FocusRequester() }
-                            val keyboardController = LocalSoftwareKeyboardController.current
 
                             if (searchActive) {
                                 BasicTextField(
@@ -183,7 +213,7 @@ fun HomeScreen(
                         item {
                             ContinueWatchingRow(
                                 items = state.watchHistory,
-                                onItemClick = onContinueWatching,
+                                onItemClick = handleContinueWatching,
                             )
                         }
                     }
@@ -194,7 +224,7 @@ fun HomeScreen(
                             ContentRow(
                                 title = "Risultati ricerca",
                                 items = state.searchResults,
-                                onItemClick = onAnimeClick,
+                                onItemClick = handleAnimeClick,
                             )
                         }
                     }
@@ -205,7 +235,7 @@ fun HomeScreen(
                             ContentRow(
                                 title = "Ultimi usciti",
                                 items = state.latest,
-                                onItemClick = onAnimeClick,
+                                onItemClick = handleAnimeClick,
                             )
                         }
                     }
