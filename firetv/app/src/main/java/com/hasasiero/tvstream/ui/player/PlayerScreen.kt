@@ -13,7 +13,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -42,7 +44,7 @@ fun PlayerScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Set metadata for watch history — use LaunchedEffect, not remember
+    // Set metadata for watch history
     LaunchedEffect(episodeId) {
         viewModel.currentAnimeId = animeId
         viewModel.currentAnimeSlug = animeSlug
@@ -63,10 +65,47 @@ fun PlayerScreen(
         }
     }
 
+    // ForwardingPlayer that intercepts next/prev to trigger navigation
+    val wrappedPlayer = remember(player, onNextEpisode, onPreviousEpisode) {
+        object : ForwardingPlayer(player) {
+            override fun getAvailableCommands(): Player.Commands {
+                val builder = super.getAvailableCommands().buildUpon()
+                if (onNextEpisode != null) builder.add(Player.COMMAND_SEEK_TO_NEXT)
+                if (onPreviousEpisode != null) builder.add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                return builder.build()
+            }
+
+            override fun isCommandAvailable(command: Int): Boolean {
+                if (command == Player.COMMAND_SEEK_TO_NEXT && onNextEpisode != null) return true
+                if (command == Player.COMMAND_SEEK_TO_PREVIOUS && onPreviousEpisode != null) return true
+                return super.isCommandAvailable(command)
+            }
+
+            override fun seekToNext() {
+                onNextEpisode?.invoke()
+            }
+
+            override fun seekToNextMediaItem() {
+                onNextEpisode?.invoke()
+            }
+
+            override fun seekToPrevious() {
+                onPreviousEpisode?.invoke()
+            }
+
+            override fun seekToPreviousMediaItem() {
+                onPreviousEpisode?.invoke()
+            }
+
+            override fun hasNextMediaItem(): Boolean = onNextEpisode != null
+            override fun hasPreviousMediaItem(): Boolean = onPreviousEpisode != null
+        }
+    }
+
     // Save progress periodically
     LaunchedEffect(player) {
         while (true) {
-            delay(10_000)
+            delay(5_000) // Save every 5s
             if (player.duration > 0) {
                 viewModel.saveProgress(episodeId, player.currentPosition, player.duration)
             }
@@ -126,38 +165,55 @@ fun PlayerScreen(
                 Button(onClick = onBack) { Text("Indietro") }
             }
         } else {
-            // PlayerView with built-in controls + View-level focus for D-pad
+            // PlayerView — intercept ALL key events at View level
+            var playerView by remember { mutableStateOf<PlayerView?>(null) }
+
             AndroidView(
                 factory = { ctx ->
                     PlayerView(ctx).apply {
-                        this.player = player
+                        this.player = wrappedPlayer
                         useController = true
                         setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                         controllerShowTimeoutMs = 5000
                         controllerAutoShow = true
+                        setShowNextButton(onNextEpisode != null)
+                        setShowPreviousButton(onPreviousEpisode != null)
                         isFocusable = true
                         isFocusableInTouchMode = true
                         descendantFocusability = android.view.ViewGroup.FOCUS_AFTER_DESCENDANTS
-                        // Show next/prev buttons
-                        setShowNextButton(onNextEpisode != null)
-                        setShowPreviousButton(onPreviousEpisode != null)
+                        // Intercept key events to show/hide controller
+                        setOnKeyListener { _, keyCode, event ->
+                            if (event.action == android.view.KeyEvent.ACTION_DOWN) {
+                                when (keyCode) {
+                                    android.view.KeyEvent.KEYCODE_BACK -> {
+                                        if (isControllerFullyVisible) {
+                                            hideController()
+                                        } else {
+                                            onBack()
+                                        }
+                                        true
+                                    }
+                                    else -> {
+                                        if (!isControllerFullyVisible) {
+                                            showController()
+                                            true
+                                        } else {
+                                            false // let PlayerView handle it
+                                        }
+                                    }
+                                }
+                            } else false
+                        }
+                        requestFocus()
+                        playerView = this
                     }
                 },
                 update = { view ->
-                    view.player = player
-                    view.requestFocus()
+                    view.player = wrappedPlayer
+                    if (!view.hasFocus()) view.requestFocus()
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-
-            // Handle next/prev via player listener
-            if (onNextEpisode != null || onPreviousEpisode != null) {
-                DisposableEffect(player) {
-                    // Override next/prev behavior via the PlayerView's button clicks
-                    // ExoPlayer fires these as commands
-                    onDispose {}
-                }
-            }
         }
     }
 }

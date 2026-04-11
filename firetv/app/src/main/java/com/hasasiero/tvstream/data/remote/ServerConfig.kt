@@ -14,8 +14,11 @@ class ServerConfig @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences("server_config", Context.MODE_PRIVATE)
 
+    val isConfigured: Boolean
+        get() = prefs.contains("base_url")
+
     var baseUrl: String
         get() = prefs.getString("base_url", BuildConfig.DEFAULT_SERVER_URL)
             ?: BuildConfig.DEFAULT_SERVER_URL
-        set(value) = prefs.edit().putString("base_url", value.trimEnd('/')).apply()
+        set(value) { prefs.edit().putString("base_url", value.trimEnd('/')).commit() }
 }

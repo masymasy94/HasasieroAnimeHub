@@ -7,6 +7,8 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -28,24 +30,38 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(
-            HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            }
-        )
-        .build()
+    fun provideOkHttpClient(serverConfig: ServerConfig): OkHttpClient {
+        // Dynamic base URL interceptor — reads current URL from ServerConfig on every request
+        val dynamicBaseUrlInterceptor = Interceptor { chain ->
+            val original = chain.request()
+            val newBaseUrl = serverConfig.baseUrl.toHttpUrl()
+            val newUrl = original.url.newBuilder()
+                .scheme(newBaseUrl.scheme)
+                .host(newBaseUrl.host)
+                .port(newBaseUrl.port)
+                .build()
+            chain.proceed(original.newBuilder().url(newUrl).build())
+        }
+
+        return OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(dynamicBaseUrlInterceptor)
+            .addInterceptor(
+                HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BASIC
+                }
+            )
+            .build()
+    }
 
     @Provides
     @Singleton
     fun provideRetrofit(
         client: OkHttpClient,
         json: Json,
-        serverConfig: ServerConfig,
     ): Retrofit = Retrofit.Builder()
-        .baseUrl(serverConfig.baseUrl + "/")
+        .baseUrl("http://placeholder.local/") // overridden by interceptor
         .client(client)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()

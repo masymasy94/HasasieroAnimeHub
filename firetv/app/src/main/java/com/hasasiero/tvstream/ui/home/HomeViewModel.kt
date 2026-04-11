@@ -87,4 +87,8 @@ class HomeViewModel @Inject constructor(
         loadLatest()
         loadWatchHistory()
     }
+
+    fun refresh() {
+        loadWatchHistory()
+    }
 }
