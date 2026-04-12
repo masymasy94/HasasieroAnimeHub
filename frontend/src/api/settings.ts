@@ -11,3 +11,7 @@ export function updateSettings(update: SettingsUpdate): Promise<Settings> {
     body: JSON.stringify(update),
   });
 }
+
+export function testTelegram(): Promise<{ success: boolean; error?: string }> {
+  return apiFetch('/settings/telegram/test', { method: 'POST' });
+}
