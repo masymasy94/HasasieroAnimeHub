@@ -15,7 +15,6 @@ from ..schemas.download import DownloadRequest
 from .download_worker import DownloadWorker
 from .metadata_service import MetadataService
 from .nas_queue import NasIOQueue
-from .plex_service import PlexService
 from .providers import ProviderRegistry
 from .ws_manager import WebSocketManager
 
@@ -73,7 +72,6 @@ class DownloadService:
         self._worker = DownloadWorker(provider_registry, metadata_service)
         self._ws = ws_manager
         self._nas_queue = nas_queue
-        self._plex = PlexService(db_session_factory)
         self._download_dir = download_dir
         self._local_temp = LOCAL_TEMP_DIR
         self._default_max_concurrent = max_concurrent
@@ -318,22 +316,6 @@ class DownloadService:
             except Exception as exc:
                 logger.warning("Failed to clean up %s: %s", path, exc)
 
-    async def _maybe_trigger_plex_scan(self) -> None:
-        """Trigger Plex library scan when no more active items remain."""
-        try:
-            async with self._db() as session:
-                result = await session.execute(
-                    select(Download).where(
-                        Download.status.in_(["queued", "downloading", "finalizing"])
-                    ).limit(1)
-                )
-                if result.scalars().first() is not None:
-                    return  # Still active
-            if await self._plex.is_configured():
-                await self._plex.trigger_library_scan()
-        except Exception as exc:
-            logger.error("Plex scan trigger failed: %s", exc)
-
     async def _get_max_concurrent(self) -> int:
         """Read max concurrent downloads from DB settings, fallback to default."""
         try:
@@ -508,7 +490,6 @@ class DownloadService:
                     dl_info["episode_number"],
                     final_path,
                 )
-                await self._maybe_trigger_plex_scan()
 
             async def on_move_failure(exc: Exception) -> None:
                 # Clean up local temp file
