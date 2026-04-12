@@ -18,6 +18,7 @@ from ..schemas.scheduled import ScheduleCreate, ScheduleUpdate
 from ..utils.episode_scanner import highest_episode
 from ..utils.safe_path import PathOutsideBaseError, resolve_inside
 from .download_service import DownloadService
+from .notification_service import NotificationService
 from .providers import ProviderRegistry
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,12 @@ class ScheduledDownloadService:
         db_session_factory: async_sessionmaker[AsyncSession],
         provider_registry: ProviderRegistry,
         download_service: DownloadService,
+        notification_service: NotificationService,
     ) -> None:
         self._db = db_session_factory
         self._registry = provider_registry
         self._download_service = download_service
+        self._notification = notification_service
         self._task: asyncio.Task | None = None
         self._base_dir = Path(settings.download_dir)
         self._next_run_at: datetime | None = None
@@ -192,6 +195,7 @@ class ScheduledDownloadService:
             )
             rows = list(result.scalars().all())
 
+        notification_results = []
         for row in rows:
             try:
                 enqueued, reason = await self._execute(row.id)
@@ -202,6 +206,11 @@ class ScheduledDownloadService:
                     enqueued,
                     f" — {reason}" if reason else "",
                 )
+                if enqueued > 0:
+                    notification_results.append({
+                        "anime_title": row.anime_title,
+                        "episode_count": enqueued,
+                    })
             except Exception as exc:
                 logger.error("Schedule %d failed: %s", row.id, exc)
                 async with self._db() as session:
@@ -210,6 +219,13 @@ class ScheduledDownloadService:
                         fresh.last_error = str(exc)
                         fresh.last_run_at = datetime.now()
                         await session.commit()
+
+        # Send Telegram notification summary
+        if notification_results:
+            try:
+                await self._notification.notify_scheduled_downloads(notification_results)
+            except Exception as exc:
+                logger.error("Failed to send scheduled download notification: %s", exc)
 
         # Advance to next run
         self._next_run_at = self._next_run(cron, datetime.now())

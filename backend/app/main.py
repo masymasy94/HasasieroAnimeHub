@@ -17,6 +17,7 @@ from .services.providers.animeunity_provider import AnimeUnityProvider
 from .services.providers.animeworld_provider import AnimeWorldProvider
 from .services.providers.animesaturn_provider import AnimeSaturnProvider
 from .services.settings_service import SettingsService
+from .services.notification_service import NotificationService
 from .services.scheduled_download_service import ScheduledDownloadService
 from .services.tracker_service import TrackerService
 from .services.ws_manager import WebSocketManager
@@ -86,10 +87,14 @@ async def lifespan(app: FastAPI):
     app.state.tracker_service = tracker_service
     tracker_service.start()
 
+    notification_service = NotificationService(async_session)
+    app.state.notification_service = notification_service
+
     scheduled_download_service = ScheduledDownloadService(
         db_session_factory=async_session,
         provider_registry=registry,
         download_service=download_service,
+        notification_service=notification_service,
     )
     app.state.scheduled_download_service = scheduled_download_service
     scheduled_download_service.start()

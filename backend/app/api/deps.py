@@ -3,6 +3,7 @@
 from fastapi import Request
 
 from ..services.download_service import DownloadService
+from ..services.notification_service import NotificationService
 from ..services.nas_queue import NasIOQueue
 from ..services.providers import ProviderRegistry
 from ..services.settings_service import SettingsService
@@ -40,3 +41,7 @@ def get_scheduled_download_service(request: Request):
 
 def get_db_session_factory(request: Request):
     return request.app.state.db_session_factory
+
+
+def get_notification_service(request: Request) -> NotificationService:
+    return request.app.state.notification_service
