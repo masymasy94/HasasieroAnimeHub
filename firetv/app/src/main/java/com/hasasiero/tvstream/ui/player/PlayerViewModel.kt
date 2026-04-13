@@ -17,6 +17,10 @@ data class PlayerUiState(
     val videoType: String? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
+    val nextEpisodeId: Int = -1,
+    val nextEpisodeNumber: String = "",
+    val prevEpisodeId: Int = -1,
+    val prevEpisodeNumber: String = "",
 )
 
 @HiltViewModel
@@ -58,6 +62,38 @@ class PlayerViewModel @Inject constructor(
                     isLoading = false,
                     error = "Impossibile caricare il video: ${e.message}",
                 )
+            }
+        }
+    }
+
+    /**
+     * Fetch the episode list for the current anime and resolve next/prev
+     * relative to [currentEpisodeId]. Updates state with the IDs.
+     */
+    fun resolveAdjacentEpisodes(currentEpisodeId: Int) {
+        if (currentAnimeId == 0 || currentAnimeSlug.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val resp = repository.getEpisodes(
+                    animeId = currentAnimeId,
+                    slug = currentAnimeSlug,
+                    site = currentSourceSite.ifEmpty { "animeunity" },
+                )
+                val episodes = resp.episodes
+                val idx = episodes.indexOfFirst { it.id == currentEpisodeId }
+                if (idx < 0) return@launch
+
+                val next = episodes.getOrNull(idx + 1)
+                val prev = episodes.getOrNull(idx - 1)
+
+                _state.value = _state.value.copy(
+                    nextEpisodeId = next?.id ?: -1,
+                    nextEpisodeNumber = next?.number ?: "",
+                    prevEpisodeId = prev?.id ?: -1,
+                    prevEpisodeNumber = prev?.number ?: "",
+                )
+            } catch (e: Exception) {
+                // Non-critical — just means no auto-play
             }
         }
     }

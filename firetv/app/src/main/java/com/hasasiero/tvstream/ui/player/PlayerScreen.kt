@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -45,8 +44,7 @@ fun PlayerScreen(
     coverUrl: String = "",
     episodeNumber: String = "",
     onBack: () -> Unit,
-    onNextEpisode: (() -> Unit)? = null,
-    onPreviousEpisode: (() -> Unit)? = null,
+    onNavigateToEpisode: (episodeId: Int, episodeNumber: String) -> Unit,
     viewModel: PlayerViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -56,10 +54,10 @@ fun PlayerScreen(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Force-dismiss the soft keyboard on entry in case a previous screen
-    // (search field) left it attached. LocalSoftwareKeyboardController alone
-    // is insufficient when the previous TextField still owns the IME session,
-    // so we also fall back to InputMethodManager + clear the focused view.
+    val hasNext = state.nextEpisodeId > 0
+    val hasPrev = state.prevEpisodeId > 0
+
+    // Force-dismiss the soft keyboard on entry
     LaunchedEffect(Unit) {
         keyboardController?.hide()
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -85,7 +83,7 @@ fun PlayerScreen(
         }
     }
 
-    // Set metadata for watch history
+    // Set metadata for watch history + resolve adjacent episodes
     LaunchedEffect(episodeId) {
         viewModel.currentAnimeId = animeId
         viewModel.currentAnimeSlug = animeSlug
@@ -94,6 +92,7 @@ fun PlayerScreen(
         viewModel.currentSourceSite = site
         viewModel.currentEpisodeNumber = episodeNumber
         viewModel.currentEpisodeTitle = title
+        viewModel.resolveAdjacentEpisodes(episodeId)
     }
 
     LaunchedEffect(episodeId, site) {
@@ -145,10 +144,10 @@ fun PlayerScreen(
     }
 
     // Detect video ended — trigger countdown if next episode available
-    LaunchedEffect(player) {
+    LaunchedEffect(player, hasNext) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && onNextEpisode != null) {
+                if (playbackState == Player.STATE_ENDED && hasNext) {
                     showOverlay = false
                     showCountdown = true
                     countdownSeconds = 5
@@ -168,7 +167,9 @@ fun PlayerScreen(
         }
         // Countdown finished — auto-play next
         showCountdown = false
-        onNextEpisode?.invoke()
+        if (state.nextEpisodeId > 0) {
+            onNavigateToEpisode(state.nextEpisodeId, state.nextEpisodeNumber)
+        }
     }
 
     Box(
@@ -180,6 +181,10 @@ fun PlayerScreen(
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     if (event.key == Key.Back) {
+                        if (showCountdown) {
+                            showCountdown = false
+                            return@onPreviewKeyEvent true
+                        }
                         if (showOverlay) {
                             showOverlay = false
                         } else {
@@ -187,16 +192,15 @@ fun PlayerScreen(
                         }
                         return@onPreviewKeyEvent true
                     }
+                    if (showCountdown) return@onPreviewKeyEvent false
                     if (!showOverlay) {
-                        // First key press just shows overlay, doesn't act
                         showOverlay = true
                         return@onPreviewKeyEvent true
                     }
-                    // Overlay visible — handle transport
                     when (event.key) {
                         Key.DirectionCenter, Key.Enter -> {
                             if (player.isPlaying) player.pause() else player.play()
-                            showOverlay = true // reset timer
+                            showOverlay = true
                             true
                         }
                         Key.DirectionLeft -> {
@@ -238,7 +242,6 @@ fun PlayerScreen(
                 }
             }
             else -> {
-                // Video surface only — no built-in controls
                 AndroidView(
                     factory = { ctx ->
                         PlayerView(ctx).apply {
@@ -247,33 +250,41 @@ fun PlayerScreen(
                             setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                         }
                     },
-                    update = { view -> view.player = player },
+                    update = { v -> v.player = player },
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                // Custom Plex-style overlay
                 PlayerOverlay(
                     visible = showOverlay && !showCountdown,
                     title = title,
                     player = player,
-                    hasNext = onNextEpisode != null,
-                    hasPrev = onPreviousEpisode != null,
+                    hasNext = hasNext,
+                    hasPrev = hasPrev,
                     onBack = {
                         if (showOverlay) showOverlay = false else onBack()
                     },
-                    onNext = { onNextEpisode?.invoke() },
-                    onPrev = { onPreviousEpisode?.invoke() },
+                    onNext = {
+                        if (state.nextEpisodeId > 0) {
+                            onNavigateToEpisode(state.nextEpisodeId, state.nextEpisodeNumber)
+                        }
+                    },
+                    onPrev = {
+                        if (state.prevEpisodeId > 0) {
+                            onNavigateToEpisode(state.prevEpisodeId, state.prevEpisodeNumber)
+                        }
+                    },
                     onAnyInteraction = { showOverlay = true },
                 )
 
-                // Auto-play countdown overlay
                 CountdownOverlay(
                     visible = showCountdown,
                     secondsLeft = countdownSeconds,
-                    nextEpisodeLabel = "EP ${episodeNumber.ifEmpty { "?" }} → Prossimo",
+                    nextEpisodeLabel = "EP ${state.nextEpisodeNumber.ifEmpty { "?" }}",
                     onPlayNow = {
                         showCountdown = false
-                        onNextEpisode?.invoke()
+                        if (state.nextEpisodeId > 0) {
+                            onNavigateToEpisode(state.nextEpisodeId, state.nextEpisodeNumber)
+                        }
                     },
                     onCancel = {
                         showCountdown = false
