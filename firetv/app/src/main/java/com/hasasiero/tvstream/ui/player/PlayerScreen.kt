@@ -143,23 +143,25 @@ fun PlayerScreen(
         }
     }
 
-    // Detect video ended — trigger countdown if next episode available
-    LaunchedEffect(player, hasNext) {
+    // Detect video ended — always set flag, countdown handles hasNext check
+    var videoEnded by remember { mutableStateOf(false) }
+    DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_ENDED && hasNext) {
-                    showOverlay = false
-                    showCountdown = true
-                    countdownSeconds = 5
+                if (playbackState == Player.STATE_ENDED) {
+                    videoEnded = true
                 }
             }
         }
         player.addListener(listener)
+        onDispose { player.removeListener(listener) }
     }
 
-    // Countdown timer
-    LaunchedEffect(showCountdown) {
-        if (!showCountdown) return@LaunchedEffect
+    // When video ended AND next episode is known → show countdown
+    LaunchedEffect(videoEnded, hasNext) {
+        if (!videoEnded || !hasNext) return@LaunchedEffect
+        showOverlay = false
+        showCountdown = true
         countdownSeconds = 5
         while (countdownSeconds > 0) {
             delay(1000)
@@ -167,9 +169,8 @@ fun PlayerScreen(
         }
         // Countdown finished — auto-play next
         showCountdown = false
-        if (state.nextEpisodeId > 0) {
-            onNavigateToEpisode(state.nextEpisodeId, state.nextEpisodeNumber)
-        }
+        videoEnded = false
+        onNavigateToEpisode(state.nextEpisodeId, state.nextEpisodeNumber)
     }
 
     Box(
@@ -282,12 +283,14 @@ fun PlayerScreen(
                     nextEpisodeLabel = "EP ${state.nextEpisodeNumber.ifEmpty { "?" }}",
                     onPlayNow = {
                         showCountdown = false
+                        videoEnded = false
                         if (state.nextEpisodeId > 0) {
                             onNavigateToEpisode(state.nextEpisodeId, state.nextEpisodeNumber)
                         }
                     },
                     onCancel = {
                         showCountdown = false
+                        videoEnded = false
                     },
                 )
             }
