@@ -143,7 +143,7 @@ fun PlayerScreen(
         }
     }
 
-    // Detect video ended — always set flag, countdown handles hasNext check
+    // Detect video ended via STATE_ENDED callback
     var videoEnded by remember { mutableStateOf(false) }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -155,6 +155,21 @@ fun PlayerScreen(
         }
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
+    }
+
+    // Fallback: detect end-of-video by position when STATE_ENDED doesn't fire
+    // (known ExoPlayer issue with HLS seekTo near end)
+    LaunchedEffect(player) {
+        while (true) {
+            delay(1000)
+            val dur = player.duration
+            val pos = player.currentPosition
+            if (dur > 0 && !videoEnded && pos >= dur - 1500 && !player.isPlaying
+                && player.playbackState != Player.STATE_BUFFERING
+            ) {
+                videoEnded = true
+            }
+        }
     }
 
     // When video ended AND next episode is known → show countdown
