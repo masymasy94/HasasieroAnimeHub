@@ -73,6 +73,9 @@ fun PlayerScreen(
 
     // Overlay visibility
     var showOverlay by remember { mutableStateOf(true) }
+    // Countdown auto-play state
+    var showCountdown by remember { mutableStateOf(false) }
+    var countdownSeconds by remember { mutableIntStateOf(5) }
 
     // Auto-hide overlay after 3s
     LaunchedEffect(showOverlay) {
@@ -139,6 +142,33 @@ fun PlayerScreen(
             }
             player.release()
         }
+    }
+
+    // Detect video ended — trigger countdown if next episode available
+    LaunchedEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED && onNextEpisode != null) {
+                    showOverlay = false
+                    showCountdown = true
+                    countdownSeconds = 5
+                }
+            }
+        }
+        player.addListener(listener)
+    }
+
+    // Countdown timer
+    LaunchedEffect(showCountdown) {
+        if (!showCountdown) return@LaunchedEffect
+        countdownSeconds = 5
+        while (countdownSeconds > 0) {
+            delay(1000)
+            countdownSeconds--
+        }
+        // Countdown finished — auto-play next
+        showCountdown = false
+        onNextEpisode?.invoke()
     }
 
     Box(
@@ -223,7 +253,7 @@ fun PlayerScreen(
 
                 // Custom Plex-style overlay
                 PlayerOverlay(
-                    visible = showOverlay,
+                    visible = showOverlay && !showCountdown,
                     title = title,
                     player = player,
                     hasNext = onNextEpisode != null,
@@ -234,6 +264,20 @@ fun PlayerScreen(
                     onNext = { onNextEpisode?.invoke() },
                     onPrev = { onPreviousEpisode?.invoke() },
                     onAnyInteraction = { showOverlay = true },
+                )
+
+                // Auto-play countdown overlay
+                CountdownOverlay(
+                    visible = showCountdown,
+                    secondsLeft = countdownSeconds,
+                    nextEpisodeLabel = "EP ${episodeNumber.ifEmpty { "?" }} → Prossimo",
+                    onPlayNow = {
+                        showCountdown = false
+                        onNextEpisode?.invoke()
+                    },
+                    onCancel = {
+                        showCountdown = false
+                    },
                 )
             }
         }

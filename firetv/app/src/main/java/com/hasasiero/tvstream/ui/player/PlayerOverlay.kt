@@ -253,6 +253,123 @@ private fun rememberPlayerDuration(player: Player): State<Long> {
     return state
 }
 
+@Composable
+fun CountdownOverlay(
+    visible: Boolean,
+    secondsLeft: Int,
+    nextEpisodeLabel: String,
+    onPlayNow: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val playFocus = remember { FocusRequester() }
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier.fillMaxSize(),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.85f))
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown) {
+                        when (event.key) {
+                            Key.Back -> { onCancel(); true }
+                            else -> false
+                        }
+                    } else false
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = "Prossimo episodio tra",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 16.sp,
+                )
+                Text(
+                    text = "$secondsLeft",
+                    color = Color.White,
+                    fontSize = 56.sp,
+                    style = MaterialTheme.typography.headlineLarge,
+                )
+                Text(
+                    text = nextEpisodeLabel,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontSize = 18.sp,
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .focusRequester(playFocus)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFFE5A00D))
+                            .clickable { onPlayNow() }
+                            .onFocusChanged {
+                                // visual feedback handled by Compose focus
+                            }
+                            .focusable()
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Riproduci ora", color = Color.Black, fontSize = 15.sp)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .clickable { onCancel() }
+                            .focusable()
+                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Annulla", color = Color.White, fontSize = 15.sp)
+                    }
+                }
+            }
+
+            // Progress bar at bottom
+            val fraction = secondsLeft / 5f
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .align(Alignment.BottomCenter),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth()
+                        .background(Color.White.copy(alpha = 0.1f)),
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(fraction = fraction)
+                        .background(Color(0xFFE5A00D)),
+                )
+            }
+        }
+
+        // Focus the play button when visible
+        LaunchedEffect(visible) {
+            if (visible) {
+                kotlinx.coroutines.delay(100)
+                try { playFocus.requestFocus() } catch (_: Exception) {}
+            }
+        }
+    }
+}
+
 private fun formatTime(ms: Long): String {
     if (ms <= 0) return "0:00"
     val totalSeconds = ms / 1000
