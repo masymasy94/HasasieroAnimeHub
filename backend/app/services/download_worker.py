@@ -5,6 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .metadata_service import MetadataService
+from .nfo_service import write_episode_nfo, write_tvshow_nfo
 from .providers import ProviderRegistry
 from .providers.base import VideoSource
 from ..utils.filename import episode_filename, extract_season
@@ -135,6 +136,31 @@ class DownloadWorker:
             logger.warning("Metadata embedding failed, using raw file")
             if raw_path.exists():
                 raw_path.rename(final_path)
+
+        write_episode_nfo(
+            final_path,
+            show=show_name,
+            season=season,
+            episode_number=episode_number,
+            episode_title=episode_title,
+            plot=plot,
+        )
+        # tvshow.nfo at the show root — skipped when already present so a
+        # user's locked-name in Jellyfin is preserved across new episodes.
+        # The show root is the parent of the file unless the worker wrote
+        # into a Plex-style `Season NN/` subfolder (default template).
+        show_root = (
+            final_path.parent.parent
+            if final_path.parent.name.lower().startswith("season ")
+            else final_path.parent
+        )
+        write_tvshow_nfo(
+            show_root,
+            title=show_name,
+            plot=plot,
+            year=year,
+            genres=genres,
+        )
 
         return final_path
 
