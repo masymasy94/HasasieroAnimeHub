@@ -15,8 +15,10 @@ from ..schemas.download import DownloadRequest
 from .download_worker import DownloadWorker
 from .metadata_service import MetadataService
 from .nas_queue import NasIOQueue
+from .nfo_service import write_episode_nfo, write_tvshow_nfo
 from .providers import ProviderRegistry
 from .ws_manager import WebSocketManager
+from ..utils.filename import extract_season
 
 logger = logging.getLogger(__name__)
 
@@ -467,6 +469,32 @@ class DownloadService:
 
             # --- Enqueue non-blocking NAS move ---
             async def on_move_success(final_path: Path) -> None:
+                # Write Kodi-style NFO sidecars at the NAS destination so
+                # Jellyfin can read them. NFOs are written here (post-move)
+                # rather than in the worker because the worker writes into
+                # local temp; the NAS queue only moves the .mp4.
+                show_name, season = extract_season(dl_info["anime_title"])
+                write_episode_nfo(
+                    final_path,
+                    show=show_name,
+                    season=season,
+                    episode_number=dl_info["episode_number"],
+                    episode_title=dl_info["episode_title"],
+                    plot=dl_info["plot"],
+                )
+                show_root = (
+                    final_path.parent.parent
+                    if final_path.parent.name.lower().startswith("season ")
+                    else final_path.parent
+                )
+                write_tvshow_nfo(
+                    show_root,
+                    title=show_name,
+                    plot=dl_info["plot"],
+                    year=dl_info["year"],
+                    genres=dl_info["genres"],
+                )
+
                 await _db_execute_with_retry(
                     self._db,
                     update(Download)
