@@ -92,6 +92,25 @@ def test_unknown_template_type_raises() -> None:
         )
 
 
+def test_preset_plex_default_with_null_ep_title() -> None:
+    out = render_filename(
+        template=PATTERN_PRESETS["plex_default"],
+        template_type="preset",
+        inputs=_inputs(episode_title=None, episode_number="1", total_episodes=13),
+    )
+    # No " - unknown" segment — the empty ep_title and its delimiter collapse.
+    assert out == "One Piece - S01E01.mp4"
+
+
+def test_preset_plex_default_with_empty_ep_title() -> None:
+    out = render_filename(
+        template=PATTERN_PRESETS["plex_default"],
+        template_type="preset",
+        inputs=_inputs(episode_title="", episode_number="1", total_episodes=13),
+    )
+    assert out == "One Piece - S01E01.mp4"
+
+
 def test_sanitizes_invalid_chars_in_output() -> None:
     out = render_filename(
         template="Foo/Bar",
