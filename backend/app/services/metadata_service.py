@@ -67,6 +67,7 @@ class MetadataService:
                     title=title,
                     show=show,
                     episode_number=episode_number,
+                    season_number=season_number,
                     genres=genres,
                     year=year,
                     description=description,
