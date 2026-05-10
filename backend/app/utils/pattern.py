@@ -59,17 +59,25 @@ def render_filename(
     ep = _format_episode(inputs.episode_number, width)
 
     if template_type == "preset":
+        # `sanitize_filename` falls back to "unknown" for empty input (to keep
+        # the *anime* title from collapsing to nothing). For optional fields
+        # like ep_title, we want a real empty string so the tidy-up regex can
+        # collapse the surrounding " - " separators.
+        ep_title = inputs.episode_title or ""
+        ep_title = sanitize_filename(ep_title) if ep_title else ""
         rendered = template.format_map(
             {
                 "anime": sanitize_filename(inputs.anime_title),
                 "season": f"{inputs.season:02d}",
                 "episode": ep,
-                "ep_title": sanitize_filename(inputs.episode_title or ""),
+                "ep_title": ep_title,
                 "ext": inputs.extension,
             }
         )
-        # Preset may leave " -  - " when ep_title is empty; tidy up.
+        # Preset may leave " -  - " (middle placeholder empty) or " - .ext"
+        # (trailing placeholder before extension empty); tidy both.
         rendered = re.sub(r"\s+-\s+-\s+", " - ", rendered)
+        rendered = re.sub(r"\s+-\s*(\.[^.]+)$", r"\1", rendered)
         rendered = rendered.strip(" -")
         return sanitize_filename(rendered, max_length=240)
 

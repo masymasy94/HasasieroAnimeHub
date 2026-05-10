@@ -123,6 +123,7 @@ class DownloadWorker:
             title=meta_title,
             show=show_name,
             episode_number=episode_number,
+            season_number=season,
             genres=genres,
             year=year,
             description=plot,

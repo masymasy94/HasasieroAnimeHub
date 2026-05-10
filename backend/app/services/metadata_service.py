@@ -22,6 +22,7 @@ class MetadataService:
         title: str,
         show: str,
         episode_number: str,
+        season_number: int | None = None,
         genres: list[str] | None = None,
         year: str | None = None,
         description: str | None = None,
@@ -46,6 +47,7 @@ class MetadataService:
                 title=title,
                 show=show,
                 episode_number=episode_number,
+                season_number=season_number,
                 genres=genres,
                 year=year,
                 description=description,
@@ -65,6 +67,7 @@ class MetadataService:
                     title=title,
                     show=show,
                     episode_number=episode_number,
+                    season_number=season_number,
                     genres=genres,
                     year=year,
                     description=description,
@@ -134,6 +137,7 @@ class MetadataService:
         title: str,
         show: str,
         episode_number: str,
+        season_number: int | None,
         genres: list[str] | None,
         year: str | None,
         description: str | None,
@@ -156,12 +160,17 @@ class MetadataService:
         cmd.extend(["-metadata", f"title={title}"])
         cmd.extend(["-metadata", f"show={show}"])
         cmd.extend(["-metadata", f"episode_id={episode_number}"])
+        cmd.extend(["-metadata", "media_type=10"])
 
         try:
             track_num = int(float(episode_number))
             cmd.extend(["-metadata", f"track={track_num}"])
+            cmd.extend(["-metadata", f"episode_sort={track_num}"])
         except (ValueError, TypeError):
             pass
+
+        if season_number is not None:
+            cmd.extend(["-metadata", f"season_number={season_number}"])
 
         if genres:
             cmd.extend(["-metadata", f"genre={', '.join(genres)}"])
