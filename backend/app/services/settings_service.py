@@ -14,6 +14,9 @@ DEFAULTS = {
     "max_concurrent_downloads": str(app_settings.max_concurrent_downloads),
     "telegram_bot_token": "",
     "telegram_chat_id": "",
+    "jellyfin_url": "http://192.168.3.54:8096",
+    "jellyfin_api_key": "1053bc875c2744f79754c2586a30de45",
+    "jellyfin_enabled": "true",
 }
 
 
@@ -34,6 +37,9 @@ class SettingsService:
             max_concurrent_downloads=int(values["max_concurrent_downloads"]),
             telegram_bot_token=values.get("telegram_bot_token", ""),
             telegram_chat_id=values.get("telegram_chat_id", ""),
+            jellyfin_url=values.get("jellyfin_url", ""),
+            jellyfin_api_key=values.get("jellyfin_api_key", ""),
+            jellyfin_enabled=values.get("jellyfin_enabled", "false") == "true",
         )
 
     async def update_settings(self, update: SettingsUpdate) -> SettingsResponse:
@@ -50,6 +56,14 @@ class SettingsService:
                 await self._upsert(session, "telegram_bot_token", update.telegram_bot_token)
             if update.telegram_chat_id is not None:
                 await self._upsert(session, "telegram_chat_id", update.telegram_chat_id)
+            if update.jellyfin_url is not None:
+                await self._upsert(session, "jellyfin_url", update.jellyfin_url.rstrip("/"))
+            if update.jellyfin_api_key is not None:
+                await self._upsert(session, "jellyfin_api_key", update.jellyfin_api_key)
+            if update.jellyfin_enabled is not None:
+                await self._upsert(
+                    session, "jellyfin_enabled", "true" if update.jellyfin_enabled else "false"
+                )
             await session.commit()
 
         return await self.get_settings()

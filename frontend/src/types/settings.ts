@@ -4,6 +4,9 @@ export interface Settings {
   max_concurrent_downloads: number;
   telegram_bot_token: string;
   telegram_chat_id: string;
+  jellyfin_url: string;
+  jellyfin_api_key: string;
+  jellyfin_enabled: boolean;
 }
 
 export interface SettingsUpdate {
@@ -11,4 +14,7 @@ export interface SettingsUpdate {
   max_concurrent_downloads?: number;
   telegram_bot_token?: string;
   telegram_chat_id?: string;
+  jellyfin_url?: string;
+  jellyfin_api_key?: string;
+  jellyfin_enabled?: boolean;
 }

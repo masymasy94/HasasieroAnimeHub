@@ -18,6 +18,7 @@ from .services.providers.animeworld_provider import AnimeWorldProvider
 from .services.providers.animesaturn_provider import AnimeSaturnProvider
 from .services.settings_service import SettingsService
 from .services.notification_service import NotificationService
+from .services.jellyfin_service import JellyfinService
 from .services.scheduled_download_service import ScheduledDownloadService
 from .services.tracker_service import TrackerService
 from .services.ws_manager import WebSocketManager
@@ -67,6 +68,9 @@ async def lifespan(app: FastAPI):
     app.state.nas_queue = nas_queue
     app.state.db_session_factory = async_session
 
+    jellyfin_service = JellyfinService(async_session)
+    app.state.jellyfin_service = jellyfin_service
+
     download_service = DownloadService(
         db_session_factory=async_session,
         provider_registry=registry,
@@ -75,6 +79,7 @@ async def lifespan(app: FastAPI):
         nas_queue=nas_queue,
         download_dir=download_dir,
         max_concurrent=settings.max_concurrent_downloads,
+        jellyfin_service=jellyfin_service,
     )
     app.state.download_service = download_service
     download_service.start()

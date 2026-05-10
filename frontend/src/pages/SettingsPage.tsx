@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, updateSettings, testTelegram } from '../api/settings';
+import { getSettings, updateSettings, testTelegram, testJellyfin } from '../api/settings';
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -12,15 +12,23 @@ export function SettingsPage() {
   const [maxConcurrent, setMaxConcurrent] = useState(2);
   const [telegramBotToken, setTelegramBotToken] = useState('');
   const [telegramChatId, setTelegramChatId] = useState('');
+  const [jellyfinUrl, setJellyfinUrl] = useState('');
+  const [jellyfinApiKey, setJellyfinApiKey] = useState('');
+  const [jellyfinEnabled, setJellyfinEnabled] = useState(false);
   const [saved, setSaved] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [testLoading, setTestLoading] = useState(false);
+  const [jfTestResult, setJfTestResult] = useState<{ success: boolean; message?: string; error?: string } | null>(null);
+  const [jfTestLoading, setJfTestLoading] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setMaxConcurrent(settings.max_concurrent_downloads);
       setTelegramBotToken(settings.telegram_bot_token || '');
       setTelegramChatId(settings.telegram_chat_id || '');
+      setJellyfinUrl(settings.jellyfin_url || '');
+      setJellyfinApiKey(settings.jellyfin_api_key || '');
+      setJellyfinEnabled(!!settings.jellyfin_enabled);
     }
   }, [settings]);
 
@@ -38,6 +46,9 @@ export function SettingsPage() {
       max_concurrent_downloads: maxConcurrent,
       telegram_bot_token: telegramBotToken,
       telegram_chat_id: telegramChatId,
+      jellyfin_url: jellyfinUrl,
+      jellyfin_api_key: jellyfinApiKey,
+      jellyfin_enabled: jellyfinEnabled,
     });
   };
 
@@ -52,6 +63,24 @@ export function SettingsPage() {
     }
     setTestLoading(false);
     setTimeout(() => setTestResult(null), 4000);
+  };
+
+  const handleTestJellyfin = async () => {
+    // Persist URL/key first so the backend tests against current input.
+    await mutation.mutateAsync({
+      jellyfin_url: jellyfinUrl,
+      jellyfin_api_key: jellyfinApiKey,
+    });
+    setJfTestLoading(true);
+    setJfTestResult(null);
+    try {
+      const result = await testJellyfin();
+      setJfTestResult(result);
+    } catch {
+      setJfTestResult({ success: false, error: 'Errore di rete' });
+    }
+    setJfTestLoading(false);
+    setTimeout(() => setJfTestResult(null), 5000);
   };
 
   if (isLoading) {
@@ -154,6 +183,74 @@ export function SettingsPage() {
           {testResult && (
             <span className={`text-sm font-medium ${testResult.success ? 'text-success' : 'text-error'}`}>
               {testResult.success ? 'Messaggio inviato!' : testResult.error}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Jellyfin */}
+      <div className="bg-bg-secondary border border-border rounded-[5px] p-6 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-text-white">Jellyfin</h2>
+            <p className="text-xs text-text-secondary">
+              Avvia automaticamente la scansione della libreria al termine di ogni download.
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={jellyfinEnabled}
+              onChange={(e) => setJellyfinEnabled(e.target.checked)}
+              className="w-4 h-4 accent-accent"
+            />
+            <span className="text-xs text-text-white">Attivo</span>
+          </label>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-text-white">
+            URL del server
+          </label>
+          <input
+            type="text"
+            value={jellyfinUrl}
+            onChange={(e) => setJellyfinUrl(e.target.value)}
+            placeholder="es. http://jellyfin:8096"
+            className="w-full px-4 py-2.5 bg-bg-primary border border-border rounded-[5px] text-text-white text-sm focus:outline-none focus:border-accent transition-colors placeholder:text-text-secondary/50"
+          />
+          <p className="text-[11px] text-text-secondary">
+            Indirizzo raggiungibile dal container Hasasiero (no trailing slash).
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-text-white">
+            API Key
+          </label>
+          <input
+            type="password"
+            value={jellyfinApiKey}
+            onChange={(e) => setJellyfinApiKey(e.target.value)}
+            placeholder="••••••••"
+            className="w-full px-4 py-2.5 bg-bg-primary border border-border rounded-[5px] text-text-white text-sm focus:outline-none focus:border-accent transition-colors placeholder:text-text-secondary/50"
+          />
+          <p className="text-[11px] text-text-secondary">
+            Genera una chiave in Jellyfin → <span className="text-accent">Dashboard → API Keys</span>.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleTestJellyfin}
+            disabled={jfTestLoading || !jellyfinUrl || !jellyfinApiKey}
+            className="px-4 py-2 bg-bg-primary border border-border text-text-white text-sm rounded-[5px] hover:border-accent disabled:opacity-50 transition-colors"
+          >
+            {jfTestLoading ? 'Test...' : 'Test connessione'}
+          </button>
+          {jfTestResult && (
+            <span className={`text-sm font-medium ${jfTestResult.success ? 'text-success' : 'text-error'}`}>
+              {jfTestResult.success ? jfTestResult.message || 'OK' : jfTestResult.error}
             </span>
           )}
         </div>

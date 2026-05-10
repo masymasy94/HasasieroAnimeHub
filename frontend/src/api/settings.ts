@@ -15,3 +15,7 @@ export function updateSettings(update: SettingsUpdate): Promise<Settings> {
 export function testTelegram(): Promise<{ success: boolean; error?: string }> {
   return apiFetch('/settings/telegram/test', { method: 'POST' });
 }
+
+export function testJellyfin(): Promise<{ success: boolean; message?: string; error?: string }> {
+  return apiFetch('/settings/jellyfin/test', { method: 'POST' });
+}

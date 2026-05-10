@@ -13,6 +13,7 @@ from ..models.download import Download
 from ..models.setting import Setting
 from ..schemas.download import DownloadRequest
 from .download_worker import DownloadWorker
+from .jellyfin_service import JellyfinService
 from .metadata_service import MetadataService
 from .nas_queue import NasIOQueue
 from .providers import ProviderRegistry
@@ -66,6 +67,7 @@ class DownloadService:
         nas_queue: NasIOQueue,
         download_dir: Path,
         max_concurrent: int = 2,
+        jellyfin_service: JellyfinService | None = None,
     ):
         self._db = db_session_factory
         self._registry = provider_registry
@@ -77,6 +79,7 @@ class DownloadService:
         self._default_max_concurrent = max_concurrent
         self._active_tasks: dict[int, asyncio.Task] = {}
         self._worker_task: asyncio.Task | None = None
+        self._jellyfin = jellyfin_service
 
     def start(self) -> None:
         self._local_temp.mkdir(parents=True, exist_ok=True)
@@ -490,6 +493,8 @@ class DownloadService:
                     dl_info["episode_number"],
                     final_path,
                 )
+                if self._jellyfin is not None:
+                    await self._jellyfin.trigger_refresh()
 
             async def on_move_failure(exc: Exception) -> None:
                 # Clean up local temp file

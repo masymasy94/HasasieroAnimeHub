@@ -4,9 +4,14 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 
 from ..schemas.setting import SettingsResponse, SettingsUpdate
+from ..services.jellyfin_service import JellyfinService
 from ..services.notification_service import NotificationService
 from ..services.settings_service import SettingsService
-from .deps import get_notification_service, get_settings_service
+from .deps import (
+    get_jellyfin_service,
+    get_notification_service,
+    get_settings_service,
+)
 
 router = APIRouter()
 
@@ -35,6 +40,17 @@ async def test_telegram(
     if success:
         return {"success": True}
     return {"success": False, "error": "Invio fallito — controlla token e chat ID"}
+
+
+@router.post("/settings/jellyfin/test")
+async def test_jellyfin(
+    jellyfin: JellyfinService = Depends(get_jellyfin_service),
+):
+    """Verify Jellyfin URL + API key by calling /System/Info."""
+    ok, message = await jellyfin.test_connection()
+    if ok:
+        return {"success": True, "message": message}
+    return {"success": False, "error": message}
 
 
 class BrowseEntry(BaseModel):

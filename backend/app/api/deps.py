@@ -3,6 +3,7 @@
 from fastapi import Request
 
 from ..services.download_service import DownloadService
+from ..services.jellyfin_service import JellyfinService
 from ..services.notification_service import NotificationService
 from ..services.nas_queue import NasIOQueue
 from ..services.providers import ProviderRegistry
@@ -45,3 +46,7 @@ def get_db_session_factory(request: Request):
 
 def get_notification_service(request: Request) -> NotificationService:
     return request.app.state.notification_service
+
+
+def get_jellyfin_service(request: Request) -> JellyfinService:
+    return request.app.state.jellyfin_service
