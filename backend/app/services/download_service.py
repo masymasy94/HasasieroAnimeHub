@@ -9,9 +9,11 @@ from pathlib import Path
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ..config import settings
 from ..models.download import Download
 from ..models.setting import Setting
 from ..schemas.download import DownloadRequest
+from .animeclick_service import AnimeClickService
 from .download_worker import DownloadWorker
 from .jellyfin_service import JellyfinService
 from .metadata_service import MetadataService
@@ -82,6 +84,11 @@ class DownloadService:
         self._active_tasks: dict[int, asyncio.Task] = {}
         self._worker_task: asyncio.Task | None = None
         self._jellyfin = jellyfin_service
+        self._animeclick = (
+            AnimeClickService(provider_registry, settings.animeclick_base_url)
+            if settings.animeclick_titles_enabled
+            else None
+        )
 
     def start(self) -> None:
         self._local_temp.mkdir(parents=True, exist_ok=True)
@@ -108,6 +115,8 @@ class DownloadService:
             await asyncio.gather(*self._active_tasks.values(), return_exceptions=True)
 
         self._active_tasks.clear()
+        if self._animeclick is not None:
+            await self._animeclick.close()
         logger.info("Download worker stopped")
 
     async def _reset_stale_statuses(self) -> None:
@@ -384,6 +393,7 @@ class DownloadService:
                 "episode_id": download.episode_id,
                 "episode_number": download.episode_number,
                 "episode_title": download.episode_title,
+                "anime_id": download.anime_id,
                 "anime_title": download.anime_title,
                 "anime_slug": download.anime_slug,
                 "cover_url": download.cover_url,
@@ -402,6 +412,27 @@ class DownloadService:
             "download_id": dl_info["id"],
             "status": "downloading",
         })
+
+        # Enrich the episode title from AnimeClick (Italian) so the filename,
+        # embedded MP4 metadata and the NFO sidecar all use the correct title.
+        # Best-effort: the service swallows its own errors and returns the
+        # existing title on any miss.
+        if self._animeclick is not None and dl_info.get("anime_id") is not None:
+            resolved = await self._animeclick.resolve_title(
+                anime_title=dl_info["anime_title"],
+                anime_slug=dl_info["anime_slug"],
+                anime_id=dl_info["anime_id"],
+                source_site=dl_info["source_site"],
+                episode_number=dl_info["episode_number"],
+                fallback=dl_info["episode_title"],
+            )
+            if resolved and resolved != dl_info["episode_title"]:
+                logger.info(
+                    "AnimeClick title for %s E%s: %r -> %r",
+                    dl_info["anime_title"], dl_info["episode_number"],
+                    dl_info["episode_title"], resolved,
+                )
+                dl_info["episode_title"] = resolved
 
         try:
             async def on_progress(

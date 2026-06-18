@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     impersonate_browser: str = "chrome"
     static_dir: str = "static"  # Path to built frontend assets
     host_download_path: str = ""  # Actual path on the host OS (for display)
+    # Enrich episode titles from AnimeClick (Italian) before embedding/NFO.
+    animeclick_titles_enabled: bool = True
+    animeclick_base_url: str = "https://www.animeclick.it"
 
     @property
     def animeunity_base_url(self) -> str:
