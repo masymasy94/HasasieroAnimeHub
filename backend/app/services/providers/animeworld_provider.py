@@ -23,12 +23,18 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://www.animeworld.ac"
 CSRF_PATTERN = re.compile(r'<meta.*?id="csrf-token"\s*?content="(.*?)"')
 SECURITY_COOKIE_PATTERN = re.compile(r"(SecurityAW-\w+)=(.*?)\s*;")
+# Player page: <source src="https://.../file.mp4"> (preferred) or any bare .mp4/.m3u8 URL
+PLAYER_SOURCE_PATTERN = re.compile(r'<source[^>]+src="([^"]+)"')
+PLAYER_MEDIA_PATTERN = re.compile(r'https?://[^\s"\'<>]+\.(?:mp4|m3u8)[^\s"\'<>]*')
 
 
 class AnimeWorldProvider(SiteProvider):
     def __init__(self) -> None:
         self._session: AsyncSession | None = None
         self._csrf_token: str | None = None
+        # Maps Episode.id (numeric data-episode-id) -> player link id (data-id, e.g. "Dinwg"),
+        # populated by get_episodes and consumed by resolve_download_url.
+        self._episode_play_ids: dict[int, str] = {}
 
     async def _ensure_session(self) -> AsyncSession:
         if self._session is None:
@@ -267,6 +273,13 @@ class AnimeWorldProvider(SiteProvider):
                 except ValueError:
                     ep_id = abs(hash(ep_id_str)) % 10_000_000
 
+                # The player/download endpoint needs the alphanumeric link id (data-id,
+                # e.g. "Dinwg"), NOT the numeric data-episode-id. Cache the mapping so
+                # resolve_download_url can look it up from the stored numeric Episode.id.
+                play_id = ep_el.get("data-id")
+                if play_id:
+                    self._episode_play_ids[ep_id] = play_id
+
                 episodes.append(
                     Episode(
                         id=ep_id,
@@ -295,45 +308,35 @@ class AnimeWorldProvider(SiteProvider):
     # ── Video URL Resolution ──
 
     async def resolve_download_url(self, episode_id: int) -> VideoSource:
-        # Method 1: POST /api/download/{id} (preferred, returns CDN URL)
-        try:
-            response = await self._request("POST", f"/api/download/{episode_id}")
-            data = response.json()
-            links = data.get("links", {})
+        # AnimeWorld serves the media URL from the embedded player page, keyed by the
+        # alphanumeric link id (data-id) — the legacy /api/download and /api/episode/info
+        # endpoints now return empty links / HTTP 401 respectively.
+        play_id = self._episode_play_ids.get(episode_id)
+        if not play_id:
+            raise RuntimeError(
+                f"No cached play id for AnimeWorld episode {episode_id}. Fetch episodes first."
+            )
 
-            # Try AnimeWorld Server (ID "9") first
-            for server_id in ("9", "4", "8"):
-                if server_id in links:
-                    server_data = links[server_id]
-                    for quality_key, quality_data in server_data.items():
-                        if quality_key == "server":
-                            continue
-                        if isinstance(quality_data, dict):
-                            url = quality_data.get("alternativeLink") or quality_data.get("link", "")
-                            if url:
-                                # Strip download-file.php wrapper
-                                url = url.replace("download-file.php?id=", "")
-                                return VideoSource(
-                                    url=url,
-                                    type="direct_mp4",
-                                    headers={"Referer": BASE_URL},
-                                )
-        except Exception as exc:
-            logger.warning("AnimeWorld /api/download failed: %s, trying fallback", exc)
+        response = await self._request(
+            "GET", "/api/episode/serverPlayerAnimeWorld", params={"id": play_id}
+        )
+        html = response.text
 
-        # Method 2: GET /api/episode/info (fallback, older API)
-        try:
-            response = await self._request("GET", f"/api/episode/info", params={"id": str(episode_id)})
-            data = response.json()
-            grabber = data.get("grabber", "")
-            if grabber:
-                return VideoSource(
-                    url=grabber,
-                    type="direct_mp4",
-                    headers={"Referer": BASE_URL},
-                )
-        except Exception as exc:
-            logger.warning("AnimeWorld /api/episode/info failed: %s", exc)
+        url = None
+        source_match = PLAYER_SOURCE_PATTERN.search(html)
+        if source_match and (".mp4" in source_match.group(1) or ".m3u8" in source_match.group(1)):
+            url = source_match.group(1)
+        if not url:
+            media_match = PLAYER_MEDIA_PATTERN.search(html)
+            if media_match:
+                url = media_match.group(0)
+
+        if url:
+            return VideoSource(
+                url=url,
+                type="m3u8" if ".m3u8" in url else "direct_mp4",
+                headers={"Referer": BASE_URL},
+            )
 
         raise RuntimeError(f"Could not resolve download URL for AnimeWorld episode {episode_id}")
 
