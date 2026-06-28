@@ -5,6 +5,7 @@ import { getAnimeDetail, getEpisodes } from '../api/anime';
 import { startDownloads } from '../api/downloads';
 import { checkTrackedStatus, trackAnime, untrackAnime } from '../api/tracked';
 import { EpisodeList } from '../components/EpisodeList';
+import { FolderBrowser } from '../components/FolderBrowser';
 import { VideoPlayer } from '../components/VideoPlayer';
 import type { Episode } from '../types/anime';
 
@@ -16,6 +17,8 @@ export function AnimeDetailPage() {
   const [episodeEnd, setEpisodeEnd] = useState(120);
   const [streamInfo, setStreamInfo] = useState<{ url: string; type: 'mp4' | 'm3u8'; title: string } | null>(null);
   const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(null);
+  const [destFolder, setDestFolder] = useState('');
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
   // Parse anime path
   const match = animePath?.match(/^(\d+)-(.+)$/);
@@ -87,11 +90,12 @@ export function AnimeDetailPage() {
         plot: anime.plot,
         year: anime.year,
         source_site: site,
+        dest_folder_override: destFolder || undefined,
         episodes: [{ episode_id: episode.id, episode_number: episode.number, episode_title: episode.title }],
       });
       queryClient.invalidateQueries({ queryKey: ['episodes'] });
     },
-    [anime, site, queryClient],
+    [anime, site, destFolder, queryClient],
   );
 
   const handleDownloadAll = useCallback(async () => {
@@ -110,6 +114,7 @@ export function AnimeDetailPage() {
       plot: anime.plot,
       year: anime.year,
       source_site: site,
+      dest_folder_override: destFolder || undefined,
       episodes: downloadable.map((ep) => ({
         episode_id: ep.id,
         episode_number: ep.number,
@@ -117,7 +122,7 @@ export function AnimeDetailPage() {
       })),
     });
     queryClient.invalidateQueries({ queryKey: ['episodes'] });
-  }, [anime, episodesData, site, queryClient]);
+  }, [anime, episodesData, site, destFolder, queryClient]);
 
   const handleDownloadRange = useCallback(
     async (from: number, to: number) => {
@@ -138,6 +143,7 @@ export function AnimeDetailPage() {
         plot: anime.plot,
         year: anime.year,
         source_site: site,
+        dest_folder_override: destFolder || undefined,
         episodes: downloadable.map((ep) => ({
           episode_id: ep.id,
           episode_number: ep.number,
@@ -146,7 +152,7 @@ export function AnimeDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['episodes'] });
     },
-    [anime, animeId, slug, site, queryClient],
+    [anime, animeId, slug, site, destFolder, queryClient],
   );
 
   const handleDownloadSelected = useCallback(
@@ -161,6 +167,7 @@ export function AnimeDetailPage() {
         plot: anime.plot,
         year: anime.year,
         source_site: site,
+        dest_folder_override: destFolder || undefined,
         episodes: selected.map((ep) => ({
           episode_id: ep.id,
           episode_number: ep.number,
@@ -169,7 +176,7 @@ export function AnimeDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: ['episodes'] });
     },
-    [anime, site, queryClient],
+    [anime, site, destFolder, queryClient],
   );
 
   const handleWatch = useCallback(
@@ -310,6 +317,30 @@ export function AnimeDetailPage() {
         </div>
       </div>
 
+      {/* Destination folder selector */}
+      <div className="flex items-center gap-3 flex-wrap rounded-[5px] bg-bg-secondary border border-border p-3">
+        <span className="text-sm text-text-secondary">Cartella di destinazione:</span>
+        <span className="text-sm text-text-white font-medium truncate max-w-[50%]">
+          {destFolder ? `/downloads/${destFolder}` : 'Predefinita (per titolo)'}
+        </span>
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={() => setShowFolderBrowser(true)}
+            className="px-3 py-1.5 text-xs font-medium rounded-[5px] bg-accent/15 text-accent border border-accent/30 hover:bg-accent/25 transition-colors"
+          >
+            Sfoglia...
+          </button>
+          {destFolder && (
+            <button
+              onClick={() => setDestFolder('')}
+              className="px-3 py-1.5 text-xs font-medium rounded-[5px] border border-border text-text-secondary hover:text-text-white hover:bg-bg-hover transition-colors"
+            >
+              Predefinita
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Episodes */}
       {episodesLoading ? (
         <div className="flex items-center justify-center py-10">
@@ -343,6 +374,18 @@ export function AnimeDetailPage() {
               ? `Ep. ${nextEpisode.number}${nextEpisode.title ? ` — ${nextEpisode.title}` : ''}`
               : undefined
           }
+        />
+      )}
+
+      {/* Destination folder browser */}
+      {showFolderBrowser && (
+        <FolderBrowser
+          initialPath={destFolder}
+          onSelect={(path) => {
+            setDestFolder(path);
+            setShowFolderBrowser(false);
+          }}
+          onClose={() => setShowFolderBrowser(false)}
         />
       )}
     </div>

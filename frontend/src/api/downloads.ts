@@ -33,6 +33,22 @@ export function retryAllFailed(): Promise<{ retried: number }> {
   return apiFetch<{ retried: number }>('/downloads/retry-all-failed', { method: 'POST' });
 }
 
+export function pauseDownload(id: number): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/downloads/${id}/pause`, { method: 'POST' });
+}
+
+export function resumeDownload(id: number): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>(`/downloads/${id}/resume`, { method: 'POST' });
+}
+
+export function pauseAllDownloads(): Promise<{ paused: number }> {
+  return apiFetch<{ paused: number }>('/downloads/pause-all', { method: 'POST' });
+}
+
+export function resumeAllDownloads(): Promise<{ resumed: number }> {
+  return apiFetch<{ resumed: number }>('/downloads/resume-all', { method: 'POST' });
+}
+
 export interface DiskUsage {
   total_bytes: number;
   used_bytes: number;

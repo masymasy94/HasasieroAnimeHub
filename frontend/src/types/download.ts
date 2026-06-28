@@ -6,7 +6,7 @@ export interface DownloadStatus {
   episode_id: number;
   episode_number: string;
   episode_title: string | null;
-  status: 'queued' | 'downloading' | 'finalizing' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'downloading' | 'finalizing' | 'completed' | 'failed' | 'cancelled' | 'paused';
   progress: number;
   downloaded_bytes: number;
   total_bytes: number;
@@ -31,6 +31,7 @@ export interface DownloadRequest {
   plot: string | null;
   year: string | null;
   source_site?: string;
+  dest_folder_override?: string | null;
   episodes: { episode_id: number; episode_number: string; episode_title?: string | null }[];
 }
 

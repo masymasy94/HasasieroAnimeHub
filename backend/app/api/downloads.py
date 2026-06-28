@@ -98,6 +98,18 @@ async def clear_completed_downloads(svc: DownloadService = Depends(get_download_
     return {"cleared": count}
 
 
+@router.post("/downloads/pause-all")
+async def pause_all_downloads(svc: DownloadService = Depends(get_download_service)):
+    count = await svc.pause_all()
+    return {"paused": count}
+
+
+@router.post("/downloads/resume-all")
+async def resume_all_downloads(svc: DownloadService = Depends(get_download_service)):
+    count = await svc.resume_all()
+    return {"resumed": count}
+
+
 @router.post("/downloads/retry-all-failed")
 async def retry_all_failed(svc: DownloadService = Depends(get_download_service)):
     count = await svc.retry_all_failed()
@@ -112,6 +124,34 @@ async def delete_download(
     deleted = await svc.delete_download(download_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Download not found")
+
+
+@router.post("/downloads/{download_id}/pause")
+async def pause_download(
+    download_id: int,
+    svc: DownloadService = Depends(get_download_service),
+):
+    paused = await svc.pause_download(download_id)
+    if not paused:
+        raise HTTPException(
+            status_code=400,
+            detail="Download cannot be paused (not queued/downloading)",
+        )
+    return {"status": "paused"}
+
+
+@router.post("/downloads/{download_id}/resume")
+async def resume_download(
+    download_id: int,
+    svc: DownloadService = Depends(get_download_service),
+):
+    resumed = await svc.resume_download(download_id)
+    if not resumed:
+        raise HTTPException(
+            status_code=400,
+            detail="Download cannot be resumed (not paused)",
+        )
+    return {"status": "queued"}
 
 
 @router.post("/downloads/{download_id}/retry")

@@ -66,7 +66,10 @@ class DownloadWorker:
         When `dest_folder_override` + `filename_template` + `filename_template_type`
         are all supplied, the file is written under
         ``download_dir / dest_folder_override / rendered_filename`` instead of
-        the Plex-style ``Show/Season NN/...`` layout.
+        the Plex-style ``Show/Season NN/...`` layout. When only
+        `dest_folder_override` is given (web downloads with a chosen folder but
+        no custom pattern), the standard Plex-style layout is rerooted under that
+        folder: ``download_dir / dest_folder_override / Show/Season NN/...``.
         """
         from ..utils.pattern import PatternInputs, render_filename
 
@@ -100,7 +103,14 @@ class DownloadWorker:
             relative_path = episode_filename(
                 anime_title, episode_number, total_episodes, episode_title
             )
-            final_path = download_dir / relative_path
+            # A bare dest_folder_override (no template) reroots the standard
+            # Plex layout under the chosen folder — used by web downloads that
+            # let the user pick a destination without a custom filename pattern.
+            if dest_folder_override:
+                rel_folder = dest_folder_override.lstrip("/")
+                final_path = download_dir / rel_folder / relative_path
+            else:
+                final_path = download_dir / relative_path
         final_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Download based on source type

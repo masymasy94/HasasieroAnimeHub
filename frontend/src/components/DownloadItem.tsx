@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { DownloadStatus } from '../types/download';
 import { useDownloadStore } from '../stores/downloadStore';
 import { ProgressBar } from './ProgressBar';
-import { cancelDownload, retryDownload } from '../api/downloads';
+import { cancelDownload, retryDownload, pauseDownload, resumeDownload } from '../api/downloads';
 import { useQueryClient } from '@tanstack/react-query';
 
 interface DownloadItemProps {
@@ -35,6 +35,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   completed: { label: 'Completato', className: 'text-success' },
   failed: { label: 'Fallito', className: 'text-error' },
   cancelled: { label: 'Annullato', className: 'text-text-secondary' },
+  paused: { label: 'In pausa', className: 'text-warning' },
 };
 
 export function DownloadItem({ download }: DownloadItemProps) {
@@ -50,6 +51,7 @@ export function DownloadItem({ download }: DownloadItemProps) {
   const statusConfig = STATUS_CONFIG[download.status] ?? STATUS_CONFIG.queued;
   const isActive = download.status === 'downloading' || download.status === 'queued';
   const isFinalizing = download.status === 'finalizing';
+  const isPaused = download.status === 'paused';
 
   const hostPath = download.host_file_path || download.file_path;
   const dirPath = hostPath ? getDirectoryPath(hostPath) : null;
@@ -61,6 +63,16 @@ export function DownloadItem({ download }: DownloadItemProps) {
 
   const handleRetry = async () => {
     await retryDownload(download.id);
+    queryClient.invalidateQueries({ queryKey: ['downloads'] });
+  };
+
+  const handlePause = async () => {
+    await pauseDownload(download.id);
+    queryClient.invalidateQueries({ queryKey: ['downloads'] });
+  };
+
+  const handleResume = async () => {
+    await resumeDownload(download.id);
     queryClient.invalidateQueries({ queryKey: ['downloads'] });
   };
 
@@ -112,6 +124,22 @@ export function DownloadItem({ download }: DownloadItemProps) {
           )}
           {isActive && (
             <button
+              onClick={handlePause}
+              className="text-xs px-2 py-1 rounded bg-warning/10 text-warning hover:bg-warning hover:text-black transition-colors"
+            >
+              Pausa
+            </button>
+          )}
+          {isPaused && (
+            <button
+              onClick={handleResume}
+              className="text-xs px-2 py-1 rounded bg-accent/10 text-accent hover:bg-accent hover:text-white transition-colors"
+            >
+              Riprendi
+            </button>
+          )}
+          {(isActive || isPaused) && (
+            <button
               onClick={handleCancel}
               className="text-xs px-2 py-1 rounded bg-error/10 text-error hover:bg-error hover:text-white transition-colors"
             >
@@ -141,6 +169,19 @@ export function DownloadItem({ download }: DownloadItemProps) {
               {speed > 0 && <span>{formatSpeed(speed)}</span>}
               <span>{progress.toFixed(1)}%</span>
             </div>
+          </div>
+        </>
+      )}
+
+      {isPaused && (
+        <>
+          <ProgressBar progress={progress} />
+          <div className="flex justify-between text-xs text-text-secondary">
+            <span>
+              {formatBytes(downloadedBytes)}
+              {totalBytes > 0 && ` / ${formatBytes(totalBytes)}`}
+            </span>
+            <span>{progress.toFixed(1)}% — in pausa</span>
           </div>
         </>
       )}

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getDownloads, cancelAllDownloads, clearCompletedDownloads, retryAllFailed, getDiskUsage } from '../api/downloads';
+import { getDownloads, cancelAllDownloads, clearCompletedDownloads, retryAllFailed, pauseAllDownloads, resumeAllDownloads, getDiskUsage } from '../api/downloads';
 import { DownloadItem } from '../components/DownloadItem';
 
 type Tab = 'all' | 'active' | 'completed' | 'failed';
 
 const TAB_FILTERS: Record<Tab, string[] | undefined> = {
   all: undefined,
-  active: ['queued', 'downloading', 'finalizing'],
+  active: ['queued', 'downloading', 'finalizing', 'paused'],
   completed: ['completed'],
   failed: ['failed', 'cancelled'],
 };
@@ -60,8 +60,24 @@ export function DownloadsPage() {
 
   const hasFailed = data?.downloads?.some((d) => d.status === 'failed');
 
+  const hasPausable = data?.downloads?.some(
+    (d) => d.status === 'downloading' || d.status === 'queued',
+  );
+
+  const hasPaused = data?.downloads?.some((d) => d.status === 'paused');
+
   const handleCancelAll = async () => {
     await cancelAllDownloads();
+    queryClient.invalidateQueries({ queryKey: ['downloads'] });
+  };
+
+  const handlePauseAll = async () => {
+    await pauseAllDownloads();
+    queryClient.invalidateQueries({ queryKey: ['downloads'] });
+  };
+
+  const handleResumeAll = async () => {
+    await resumeAllDownloads();
     queryClient.invalidateQueries({ queryKey: ['downloads'] });
   };
 
@@ -97,6 +113,22 @@ export function DownloadsPage() {
               className="px-4 py-2 text-xs font-medium rounded-[5px] bg-bg-secondary text-text-secondary hover:text-text-white border border-border hover:bg-bg-hover transition-colors"
             >
               Pulisci lista
+            </button>
+          )}
+          {hasPaused && (
+            <button
+              onClick={handleResumeAll}
+              className="px-4 py-2 text-xs font-medium rounded-[5px] bg-accent/10 text-accent hover:bg-accent hover:text-white transition-colors"
+            >
+              Riprendi tutti
+            </button>
+          )}
+          {hasPausable && (
+            <button
+              onClick={handlePauseAll}
+              className="px-4 py-2 text-xs font-medium rounded-[5px] bg-warning/10 text-warning hover:bg-warning hover:text-black transition-colors"
+            >
+              Pausa tutti
             </button>
           )}
           {hasActive && (

@@ -82,6 +82,9 @@ class DownloadService:
         self._local_temp = LOCAL_TEMP_DIR
         self._default_max_concurrent = max_concurrent
         self._active_tasks: dict[int, asyncio.Task] = {}
+        # IDs being paused — so the CancelledError handler in _download_one
+        # records "paused" instead of "cancelled" and keeps partial files.
+        self._pausing: set[int] = set()
         self._worker_task: asyncio.Task | None = None
         self._jellyfin = jellyfin_service
         self._animeclick = (
@@ -229,6 +232,69 @@ class DownloadService:
                 update(Download)
                 .where(Download.status.in_(["queued", "downloading"]))
                 .values(status="cancelled")
+            )
+            await session.commit()
+            return result.rowcount
+
+    async def pause_download(self, download_id: int) -> bool:
+        """Pause a queued or downloading episode.
+
+        An active transfer is cancelled but its partial ``.part`` file is kept,
+        so resuming continues from where it stopped (for direct MP4 streams).
+        """
+        task = self._active_tasks.get(download_id)
+        if task:
+            # The CancelledError handler records "paused" because the id is in
+            # _pausing, and skips partial-file cleanup.
+            self._pausing.add(download_id)
+            task.cancel()
+            return True
+
+        async with self._db() as session:
+            result = await session.execute(
+                update(Download)
+                .where(Download.id == download_id)
+                .where(Download.status.in_(["queued", "downloading"]))
+                .values(status="paused", speed_bps=0)
+            )
+            await session.commit()
+            return result.rowcount > 0
+
+    async def pause_all(self) -> int:
+        """Pause every queued and downloading episode."""
+        for did in list(self._active_tasks.keys()):
+            self._pausing.add(did)
+        for task in list(self._active_tasks.values()):
+            task.cancel()
+
+        async with self._db() as session:
+            result = await session.execute(
+                update(Download)
+                .where(Download.status.in_(["queued", "downloading"]))
+                .values(status="paused", speed_bps=0)
+            )
+            await session.commit()
+            return result.rowcount
+
+    async def resume_download(self, download_id: int) -> bool:
+        """Re-queue a paused episode so the worker picks it up again."""
+        async with self._db() as session:
+            result = await session.execute(
+                update(Download)
+                .where(Download.id == download_id)
+                .where(Download.status == "paused")
+                .values(status="queued", error_message=None, started_at=None)
+            )
+            await session.commit()
+            return result.rowcount > 0
+
+    async def resume_all(self) -> int:
+        """Re-queue every paused episode."""
+        async with self._db() as session:
+            result = await session.execute(
+                update(Download)
+                .where(Download.status == "paused")
+                .values(status="queued", error_message=None, started_at=None)
             )
             await session.commit()
             return result.rowcount
@@ -592,11 +658,13 @@ class DownloadService:
             # Download slot is released here — NAS move proceeds independently
 
         except asyncio.CancelledError:
+            was_paused = dl_info["id"] in self._pausing
+            self._pausing.discard(dl_info["id"])
             await _db_execute_with_retry(
                 self._db,
                 update(Download)
                 .where(Download.id == dl_info["id"])
-                .values(status="cancelled"),
+                .values(status="paused" if was_paused else "cancelled", speed_bps=0),
             )
             raise
 
