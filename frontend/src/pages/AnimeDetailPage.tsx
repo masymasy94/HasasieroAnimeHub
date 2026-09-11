@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { getAnimeDetail, getEpisodes } from '../api/anime';
+import { getAnimeDetail, getEpisodes, getStreamSource } from '../api/anime';
 import { startDownloads } from '../api/downloads';
 import { createSchedule } from '../api/scheduled';
 import { checkTrackedStatus, trackAnime, untrackAnime } from '../api/tracked';
@@ -201,9 +201,7 @@ export function AnimeDetailPage() {
       if (!anime) return;
       try {
         setCurrentEpisode(episode);
-        const resp = await fetch(`/api/stream/source/${episode.id}?site=${encodeURIComponent(site)}`);
-        if (!resp.ok) throw new Error('Impossibile ottenere lo stream');
-        const data = await resp.json();
+        const data = await getStreamSource(episode.id, site);
         setStreamInfo({
           url: data.url,
           type: data.type,
@@ -217,11 +215,19 @@ export function AnimeDetailPage() {
     [anime, site],
   );
 
+  // The player holds a signed CDN link that expires after ~24h; re-resolving the same
+  // episode hands it a live one instead of leaving it stuck on a dead URL.
+  const handleRefreshUrl = useCallback(async () => {
+    if (!currentEpisode) return null;
+    const data = await getStreamSource(currentEpisode.id, site);
+    return data.url;
+  }, [currentEpisode, site]);
+
   const nextEpisode = useMemo(() => {
     if (!currentEpisode || !episodesData?.episodes) return null;
     const currentNum = parseFloat(currentEpisode.number);
     return episodesData.episodes.find((ep) => parseFloat(ep.number) > currentNum) || null;
-  }, [currentEpisode, episodesData?.episodes]);
+  }, [currentEpisode, episodesData]);
 
   const handleNext = useCallback(() => {
     if (nextEpisode) handleWatch(nextEpisode);
@@ -358,10 +364,12 @@ export function AnimeDetailPage() {
       {/* Video Player Overlay */}
       {streamInfo && (
         <VideoPlayer
+          key={streamInfo.url}
           url={streamInfo.url}
           type={streamInfo.type}
           title={streamInfo.title}
           onClose={() => { setStreamInfo(null); setCurrentEpisode(null); }}
+          onRefreshUrl={handleRefreshUrl}
           onNext={nextEpisode ? handleNext : undefined}
           nextEpisodeLabel={
             nextEpisode

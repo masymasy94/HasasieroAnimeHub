@@ -8,17 +8,31 @@ interface VideoPlayerProps {
   title?: string;
   onNext?: () => void;
   nextEpisodeLabel?: string;
+  /** Re-resolve the episode to a fresh URL, or null if it can't be resolved. */
+  onRefreshUrl?: () => Promise<string | null>;
 }
 
 const COUNTDOWN_SECONDS = 5;
 
-export function VideoPlayer({ url, type, onClose, title, onNext, nextEpisodeLabel }: VideoPlayerProps) {
+export function VideoPlayer({ url, type, onClose, title, onNext, nextEpisodeLabel, onRefreshUrl }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showCountdown, setShowCountdown] = useState(false);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // What we actually load: the prop at first, then whatever a refresh resolved to.
+  // The parent keys us on `url`, so a new episode remounts and resets all of this.
+  const [srcUrl, setSrcUrl] = useState(url);
+  const resumeAtRef = useRef(0);
+  const recoveredRef = useRef(false);
+  // Held in a ref so the setup effect doesn't depend on the parent's callback
+  // identity — an inline arrow up there would reload the video on every render.
+  const refreshRef = useRef(onRefreshUrl);
+  useEffect(() => {
+    refreshRef.current = onRefreshUrl;
+  }, [onRefreshUrl]);
 
   const clearCountdown = useCallback(() => {
     if (intervalRef.current) {
@@ -47,6 +61,35 @@ export function VideoPlayer({ url, type, onClose, title, onNext, nextEpisodeLabe
     clearCountdown();
     setError(null);
 
+    const startPlayback = () => {
+      if (resumeAtRef.current > 0) video.currentTime = resumeAtRef.current;
+      video.play().catch(() => {});
+    };
+
+    // The CDN link is signed and dies after ~24h — on a tab left open overnight every
+    // retry then gets a 410 and the picture just freezes. Re-resolve the episode once
+    // and resume where we were; failing again without playing in between is a real error.
+    const recover = async (message: string) => {
+      if (!refreshRef.current || recoveredRef.current) {
+        setError(message);
+        return;
+      }
+      recoveredRef.current = true;
+      resumeAtRef.current = video.currentTime || resumeAtRef.current;
+      const fresh = await refreshRef.current().catch(() => null);
+      if (fresh) setSrcUrl(fresh);
+      else setError(message);
+    };
+
+    const handleMediaError = () => recover('Errore streaming: sorgente non più disponibile');
+    const clearRecovery = () => {
+      recoveredRef.current = false;
+    };
+
+    video.addEventListener('loadedmetadata', startPlayback);
+    video.addEventListener('error', handleMediaError);
+    video.addEventListener('playing', clearRecovery);
+
     if (type === 'm3u8') {
       if (Hls.isSupported()) {
         const hls = new Hls({
@@ -54,38 +97,33 @@ export function VideoPlayer({ url, type, onClose, title, onNext, nextEpisodeLabe
           maxMaxBufferLength: 120,
         });
         hlsRef.current = hls;
-        hls.loadSource(url);
+        hls.loadSource(srcUrl);
         hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(() => {});
-        });
+        hls.on(Hls.Events.MANIFEST_PARSED, startPlayback);
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data.fatal) {
-            setError(`Errore streaming: ${data.details}`);
+            recover(`Errore streaming: ${data.details}`);
           }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = url;
-        video.addEventListener('loadedmetadata', () => {
-          video.play().catch(() => {});
-        });
+        video.src = srcUrl;
       } else {
         setError('Il browser non supporta lo streaming HLS');
       }
     } else {
-      video.src = url;
-      video.addEventListener('loadedmetadata', () => {
-        video.play().catch(() => {});
-      });
+      video.src = srcUrl;
     }
 
     return () => {
+      video.removeEventListener('loadedmetadata', startPlayback);
+      video.removeEventListener('error', handleMediaError);
+      video.removeEventListener('playing', clearRecovery);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
     };
-  }, [url, type, clearCountdown]);
+  }, [srcUrl, type, clearCountdown]);
 
   // Video ended — start countdown if next episode available
   useEffect(() => {

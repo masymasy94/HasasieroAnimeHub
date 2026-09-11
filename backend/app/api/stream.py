@@ -194,7 +194,11 @@ async def proxy_segment(
                         sent += len(chunk)
                         yield chunk
                     return
-                except httpx.RemoteProtocolError as exc:
+                # Any transport-level break mid-body, not just a clean "peer closed"
+                # (RemoteProtocolError): a reset connection surfaces as ReadError and a
+                # stalled edge as ReadTimeout, and both used to escape as a 500 that
+                # froze the picture for good.
+                except httpx.TransportError as exc:
                     if not can_resume:
                         raise
                     resumes += 1

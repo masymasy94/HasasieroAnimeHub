@@ -1,5 +1,5 @@
 """Segment proxy must resume after the CDN drops the connection mid-body, without
-duplicating or losing bytes, and must never leak an unhandled RemoteProtocolError
+duplicating or losing bytes, and must never leak an unhandled transport error
 out of the streaming generator.
 """
 import asyncio
@@ -75,6 +75,21 @@ def test_resume_after_mid_stream_drop_yields_all_bytes_once(monkeypatch):
         ],
     )
     assert body == b"AAAABBBBCCCC"
+    assert len(_FakeClient.created) == 2
+
+
+def test_resume_after_connection_reset(monkeypatch):
+    """A reset connection reaches us as ReadError, not RemoteProtocolError. It used to
+    escape the generator as a 500 and freeze the picture; it must resume like a drop."""
+    exc = httpx.ReadError("[Errno 104] Connection reset by peer")
+    body = _run_proxy_segment(
+        monkeypatch,
+        responses=[
+            _FakeResp([b"AAAA"], raise_exc=exc),
+            _FakeResp([b"BBBB"], status_code=206),
+        ],
+    )
+    assert body == b"AAAABBBB"
     assert len(_FakeClient.created) == 2
 
 
