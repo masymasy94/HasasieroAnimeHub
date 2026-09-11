@@ -51,12 +51,30 @@ class _FakeClient:
         pass
 
 
+
+def _fake_request(range_header=None):
+    """Stand-in for the starlette Request: headers plus the disconnect probe the
+    proxy uses to drop a range the viewer has already seeked away from."""
+
+    async def is_disconnected():
+        return False
+
+    return type(
+        "Req",
+        (),
+        {
+            "headers": {"range": range_header} if range_header else {},
+            "is_disconnected": staticmethod(is_disconnected),
+        },
+    )()
+
+
 def _run_proxy_segment(monkeypatch, responses, range_header=None):
     _FakeClient.queue = list(responses)
     _FakeClient.created = []
     monkeypatch.setattr("app.api.stream.httpx.AsyncClient", _FakeClient)
 
-    request = type("Req", (), {"headers": {"range": range_header} if range_header else {}})()
+    request = _fake_request(range_header)
 
     async def go():
         response = await proxy_segment(request=request, url="https://cdn.example/1080p.mp4", headers="{}")
@@ -138,7 +156,7 @@ def test_unrecognized_range_disables_resume(monkeypatch):
     _FakeClient.queue = [_FakeResp([b"AAAA"], raise_exc=exc)]
     _FakeClient.created = []
     monkeypatch.setattr("app.api.stream.httpx.AsyncClient", _FakeClient)
-    request = type("Req", (), {"headers": {"range": "bytes=-500"}})()
+    request = _fake_request("bytes=-500")
 
     async def go():
         response = await proxy_segment(request=request, url="https://cdn.example/1080p.mp4", headers="{}")

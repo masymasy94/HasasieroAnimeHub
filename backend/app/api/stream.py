@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from urllib.parse import urlencode, urljoin, quote
 
 import httpx
@@ -22,41 +23,69 @@ RETRY_ATTEMPTS = 3
 # seconds later — retry those like a transport error so a seek landing during one
 # blip doesn't surface as a hard, playback-killing error.
 RETRYABLE_STATUS = frozenset({502, 503, 504})
-# A seek far ahead lands on a byte range the edge hasn't warmed from origin yet; it
-# answers 503 for *tens of seconds* (observed ~35s across edges, even on a fresh
-# token) until that range is ready. A ~1.5s budget gives up mid-warmup and kills
-# playback, so bridge the whole window with capped backoff.
-SEND_RETRY_MAX_SECONDS = 40.0
+# What that 503 actually is (measured 2026-09-11): vixcloud edges rate-limit per
+# (our IP, edge host). Open a handful of connections to au-d1-03 and *every* request
+# to that host 503s for ~2-4 minutes — a fresh token included — while au-d1-05 keeps
+# serving the very same file. So a seek doesn't wait out a cold byte range, it waits
+# out a block that our own retries keep alive.
+# The signed token is host-independent, so the way out is to take the next edge.
+EDGE_HOSTS = tuple(f"au-d1-{n:02d}.vix-content.net" for n in range(1, 6))
+# Backstop only, now that a blocked edge costs one hop instead of a wait: enough to
+# ride out a real blip, short enough that a dead upstream fails while the player can
+# still re-resolve and resume.
+SEND_RETRY_MAX_SECONDS = 10.0
+
+
+def _next_edge(request: httpx.Request) -> httpx.Request | None:
+    """Same request aimed at the next vixcloud edge, or None if it isn't one."""
+    try:
+        index = EDGE_HOSTS.index(request.url.host)
+    except ValueError:
+        return None
+    host = EDGE_HOSTS[(index + 1) % len(EDGE_HOSTS)]
+    # Host: is derived from the URL, so drop the stale one and let httpx set it.
+    headers = [(k, v) for k, v in request.headers.raw if k.lower() != b"host"]
+    return httpx.Request(request.method, request.url.copy_with(host=host), headers=headers)
 
 
 async def _send_with_retry(
-    client: httpx.AsyncClient, request: httpx.Request, stream: bool = False
+    client: httpx.AsyncClient,
+    request: httpx.Request,
+    stream: bool = False,
+    client_gone: Callable[[], Awaitable[bool]] | None = None,
 ) -> httpx.Response:
     """Send a request, retrying transient failures: transport errors and 5xx blips.
 
-    CDN edges go unreachable for a minute at a time (blip, ISP-level block) and also
-    answer transient 503s on the same signed URL; without this a single failed connect
-    or a 503 during a seek kills playback mid-episode. Retries for up to
-    SEND_RETRY_MAX_SECONDS with capped exponential backoff so a far seek becomes a
-    buffering pause, not a dead player: the browser holds the range request open the
-    whole time and resumes on its own once the edge finally serves the 206.
+    A failing edge is answered by moving to the next one (see EDGE_HOSTS) rather than
+    by waiting: the 503 means that host is rate-limiting us, and hammering it only
+    extends the block that froze the picture in the first place. Sleeping happens once
+    a full lap of the edges has failed, i.e. the CDN is genuinely having a bad time.
+    Gives up after SEND_RETRY_MAX_SECONDS, or as soon as the viewer has moved on.
     """
-    # ponytail: capped-backoff time budget (0.5,1,2,4,8,8,… up to ~40s). Bridges an
-    # edge warming a cold byte range; still bounded so a genuine outage fails cleanly.
-    delay, waited = 0.5, 0.0
+    # ponytail: rotate edges, back off once per lap (0.5,1,2,4,8s up to ~10s total).
+    delay, waited, hops = 0.5, 0.0, 0
     while True:
-        over_budget = waited >= SEND_RETRY_MAX_SECONDS
+        # A viewer who seeked or changed episode left this range request behind; every
+        # further attempt is pure rate-limit pressure on the stream they *are* watching.
+        abandoned = client_gone is not None and await client_gone()
+        over_budget = waited >= SEND_RETRY_MAX_SECONDS or abandoned
         try:
             resp = await client.send(request, stream=stream)
         except httpx.TransportError as exc:
             if over_budget:
                 raise
-            logger.warning("upstream %s failed (%s), retry in %.1fs", request.url.host, exc, delay)
+            logger.warning("upstream %s failed (%s), trying next edge", request.url.host, exc)
         else:
             if resp.status_code not in RETRYABLE_STATUS or over_budget:
                 return resp
             await resp.aclose()
-            logger.warning("upstream %s returned %d, retry in %.1fs", request.url.host, resp.status_code, delay)
+            logger.warning("upstream %s returned %d, trying next edge", request.url.host, resp.status_code)
+        rotated = _next_edge(request)
+        if rotated is not None:
+            request = rotated
+            hops += 1
+            if hops % len(EDGE_HOSTS):
+                continue
         await asyncio.sleep(delay)
         waited += delay
         delay = min(delay * 2, 8.0)
@@ -99,7 +128,11 @@ async def proxy_m3u8(
     # Use httpx for the upstream request
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
         try:
-            resp = await _send_with_retry(client, client.build_request("GET", url, headers=upstream_headers))
+            resp = await _send_with_retry(
+                client,
+                client.build_request("GET", url, headers=upstream_headers),
+                client_gone=request.is_disconnected,
+            )
         except httpx.TransportError as exc:
             raise HTTPException(status_code=502, detail="Upstream unreachable") from exc
         if resp.status_code != 200:
@@ -143,6 +176,7 @@ async def proxy_segment(
             client,
             client.build_request("GET", url, headers=upstream_headers),
             stream=True,
+            client_gone=request.is_disconnected,
         )
     except httpx.TransportError as exc:
         await client.aclose()

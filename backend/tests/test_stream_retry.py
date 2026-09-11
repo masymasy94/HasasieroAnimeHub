@@ -3,7 +3,12 @@ import asyncio
 import httpx
 import pytest
 
-from app.api.stream import RETRY_ATTEMPTS, SEND_RETRY_MAX_SECONDS, _send_with_retry
+from app.api.stream import (
+    EDGE_HOSTS,
+    RETRY_ATTEMPTS,
+    SEND_RETRY_MAX_SECONDS,
+    _send_with_retry,
+)
 
 
 class _FlakyClient:
@@ -88,3 +93,50 @@ def test_returns_final_503_when_upstream_stays_down(slept):
     resp = asyncio.run(_send_with_retry(client, _request(), stream=True))
     assert resp.status_code == 503
     assert sum(slept) >= SEND_RETRY_MAX_SECONDS
+
+
+class _BlockedEdgeClient:
+    """One edge rate-limits us with 503s; every other edge serves the same token."""
+
+    def __init__(self, blocked: str):
+        self.blocked = blocked
+        self.hosts: list[str] = []
+
+    async def send(self, request, stream=False):
+        self.hosts.append(request.url.host)
+        return _Resp(503 if request.url.host == self.blocked else 206)
+
+
+def test_503_moves_to_another_edge(slept):
+    client = _BlockedEdgeClient(blocked=EDGE_HOSTS[0])
+    request = httpx.Request("GET", f"https://{EDGE_HOSTS[0]}/download/1080p.mp4?token=x")
+    resp = asyncio.run(_send_with_retry(client, request, stream=True))
+    assert resp.status_code == 206
+    # Straight to the next edge, no waiting: the block is per edge host, and a signed
+    # vixcloud token is valid on all of them.
+    assert client.hosts == [EDGE_HOSTS[0], EDGE_HOSTS[1]]
+    assert slept == []
+
+
+def test_all_edges_blocked_backs_off_once_per_round(slept):
+    client = _Flaky503Client(failures=99)
+    request = httpx.Request("GET", f"https://{EDGE_HOSTS[0]}/download/1080p.mp4?token=x")
+    resp = asyncio.run(_send_with_retry(client, request, stream=True))
+    assert resp.status_code == 503
+    # One sleep per full lap of the edges, not per attempt.
+    assert client.calls >= len(EDGE_HOSTS) * len(slept)
+    assert sum(slept) >= SEND_RETRY_MAX_SECONDS
+
+
+def test_stops_retrying_when_client_is_gone(slept):
+    client = _Flaky503Client(failures=99)
+
+    async def gone():
+        return True
+
+    resp = asyncio.run(_send_with_retry(client, _request(), stream=True, client_gone=gone))
+    # The browser abandoned this range (a seek, a new episode): one attempt, then stop —
+    # retrying for a viewer who left is what gets the edge to rate-limit the ones watching.
+    assert resp.status_code == 503
+    assert client.calls == 1
+    assert slept == []
