@@ -10,7 +10,8 @@ interface ApiService {
     @GET("api/latest")
     suspend fun getLatest(): SearchResponse
 
-    @GET("api/search")
+    // format=json: the default is an SSE stream for the web UI, unreadable here
+    @GET("api/search?format=json")
     suspend fun search(@Query("title") title: String): SearchResponse
 
     @GET("api/sites")

@@ -1,6 +1,7 @@
 package com.hasasiero.tvstream.di
 
 import com.hasasiero.tvstream.data.remote.ApiService
+import com.hasasiero.tvstream.data.remote.RemoteLog
 import com.hasasiero.tvstream.data.remote.ServerConfig
 import dagger.Module
 import dagger.Provides
@@ -43,10 +44,26 @@ object NetworkModule {
             chain.proceed(original.newBuilder().url(newUrl).build())
         }
 
+        // Every API call ends up in the server log, failures with their stack trace
+        val remoteLogInterceptor = Interceptor { chain ->
+            val req = chain.request()
+            val start = System.currentTimeMillis()
+            try {
+                chain.proceed(req).also {
+                    val msg = "${req.method} ${req.url.encodedPath}?${req.url.encodedQuery ?: ""} -> ${it.code} in ${System.currentTimeMillis() - start}ms"
+                    if (it.isSuccessful) RemoteLog.d("Http", msg) else RemoteLog.w("Http", msg)
+                }
+            } catch (e: Exception) {
+                RemoteLog.e("Http", "${req.method} ${req.url} failed after ${System.currentTimeMillis() - start}ms", e)
+                throw e
+            }
+        }
+
         return OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .addInterceptor(dynamicBaseUrlInterceptor)
+            .addInterceptor(remoteLogInterceptor)
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
                     level = HttpLoggingInterceptor.Level.BASIC

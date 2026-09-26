@@ -1,6 +1,8 @@
 package com.hasasiero.tvstream.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import com.hasasiero.tvstream.data.remote.RemoteLog
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -35,6 +37,13 @@ object Settings
 @Composable
 fun AppNavGraph() {
     val navController = rememberNavController()
+    DisposableEffect(navController) {
+        val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, dest, args ->
+            RemoteLog.i("Nav", "-> ${dest.route} ${args?.keySet()?.associateWith { args.get(it) } ?: ""}")
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
 
     NavHost(navController = navController, startDestination = Home) {
         composable<Home> {

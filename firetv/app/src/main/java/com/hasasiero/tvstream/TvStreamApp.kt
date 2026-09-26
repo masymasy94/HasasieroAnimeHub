@@ -1,19 +1,19 @@
 package com.hasasiero.tvstream
 
 import android.app.Application
-import android.util.Log
+import com.hasasiero.tvstream.data.remote.RemoteLog
+import com.hasasiero.tvstream.data.remote.ServerConfig
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class TvStreamApp : Application() {
+    @Inject
+    lateinit var serverConfig: ServerConfig
+
     override fun onCreate() {
         super.onCreate()
-
-        // Global crash handler — log the error for debugging
-        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            Log.e("AnimeHub", "UNCAUGHT EXCEPTION", throwable)
-            defaultHandler?.uncaughtException(thread, throwable)
-        }
+        // Crash handler + log upload to the server (see `docker logs animehub | grep animehub.tv`)
+        RemoteLog.init(this) { serverConfig.baseUrl }
     }
 }

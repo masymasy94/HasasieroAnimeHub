@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hasasiero.tvstream.data.local.WatchHistoryDao
 import com.hasasiero.tvstream.data.local.WatchHistoryEntry
+import com.hasasiero.tvstream.data.remote.RemoteLog
 import com.hasasiero.tvstream.data.remote.ServerConfig
 import com.hasasiero.tvstream.data.repository.ContentRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -58,6 +59,7 @@ class PlayerViewModel @Inject constructor(
                     isLoading = false,
                 )
             } catch (e: Exception) {
+                RemoteLog.e("Player", "stream source $site/$episodeId failed", e)
                 _state.value = PlayerUiState(
                     isLoading = false,
                     error = "Impossibile caricare il video: ${e.message}",
@@ -93,6 +95,7 @@ class PlayerViewModel @Inject constructor(
                     prevEpisodeNumber = prev?.number ?: "",
                 )
             } catch (e: Exception) {
+                RemoteLog.w("Player", "adjacent episodes for $currentEpisodeId failed", e)
                 // Non-critical — just means no auto-play
             }
         }

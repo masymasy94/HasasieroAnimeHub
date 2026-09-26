@@ -27,32 +27,41 @@ def _sse_event(event: str, data: dict | list) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+async def _search_one(provider, title: str):
+    try:
+        results = await asyncio.wait_for(
+            provider.search(title), timeout=PROVIDER_TIMEOUT
+        )
+        for r in results:
+            r.source_site = provider.site_id
+        return provider.site_id, results
+    except asyncio.TimeoutError:
+        logger.warning("Search timed out for %s (>%ss)", provider.site_id, PROVIDER_TIMEOUT)
+        return provider.site_id, []
+    except Exception as exc:
+        logger.warning("Search failed for %s: %s", provider.site_id, exc)
+        return provider.site_id, []
+
+
 @router.get("/search")
 async def search_anime(
     title: str = Query(..., min_length=1),
+    format: str = Query("sse"),
     registry: ProviderRegistry = Depends(get_provider_registry),
 ):
-    """Stream search results via SSE as each provider responds."""
+    """Stream search results via SSE as each provider responds.
+
+    `format=json` returns one plain SearchResponse instead (the Fire TV app
+    can't read SSE).
+    """
+    providers = registry.all_providers()
+
+    if format == "json":
+        per_site = await asyncio.gather(*[_search_one(p, title) for p in providers])
+        return SearchResponse(results=[r for _, results in per_site for r in results])
 
     async def event_stream():
-        providers = registry.all_providers()
-
-        async def _search_one(provider):
-            try:
-                results = await asyncio.wait_for(
-                    provider.search(title), timeout=PROVIDER_TIMEOUT
-                )
-                for r in results:
-                    r.source_site = provider.site_id
-                return provider.site_id, results
-            except asyncio.TimeoutError:
-                logger.warning("Search timed out for %s (>%ss)", provider.site_id, PROVIDER_TIMEOUT)
-                return provider.site_id, []
-            except Exception as exc:
-                logger.warning("Search failed for %s: %s", provider.site_id, exc)
-                return provider.site_id, []
-
-        tasks = [asyncio.create_task(_search_one(p)) for p in providers]
+        tasks = [asyncio.create_task(_search_one(p, title)) for p in providers]
 
         for coro in asyncio.as_completed(tasks):
             site_id, results = await coro

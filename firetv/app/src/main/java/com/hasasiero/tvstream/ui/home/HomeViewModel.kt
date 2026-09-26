@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hasasiero.tvstream.data.local.WatchHistoryDao
 import com.hasasiero.tvstream.data.local.WatchHistoryEntry
+import com.hasasiero.tvstream.data.remote.RemoteLog
 import com.hasasiero.tvstream.data.repository.ContentRepository
 import com.hasasiero.tvstream.domain.model.AnimeSearchResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,7 +47,9 @@ class HomeViewModel @Inject constructor(
             try {
                 val history = watchHistoryDao.getRecent()
                 _state.value = _state.value.copy(watchHistory = history)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                RemoteLog.e("Home", "watch history load failed", e)
+            }
         }
     }
 
@@ -56,6 +60,7 @@ class HomeViewModel @Inject constructor(
                 val latest = repository.getLatest()
                 _state.value = _state.value.copy(latest = latest, isLoading = false)
             } catch (e: Exception) {
+                RemoteLog.e("Home", "latest load failed", e)
                 _state.value = _state.value.copy(
                     isLoading = false,
                     error = "Errore: ${e.javaClass.simpleName}: ${e.message}",
@@ -75,9 +80,14 @@ class HomeViewModel @Inject constructor(
             delay(400)
             _state.value = _state.value.copy(isSearching = true)
             try {
+                RemoteLog.i("Home", "search '$query'")
                 val results = repository.search(query)
+                RemoteLog.i("Home", "search '$query' -> ${results.size} results")
                 _state.value = _state.value.copy(searchResults = results, isSearching = false)
+            } catch (e: CancellationException) {
+                throw e // superseded by the next keystroke, not an error
             } catch (e: Exception) {
+                RemoteLog.e("Home", "search '$query' failed", e)
                 _state.value = _state.value.copy(isSearching = false)
             }
         }

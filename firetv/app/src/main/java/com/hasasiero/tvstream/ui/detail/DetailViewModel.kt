@@ -2,6 +2,7 @@ package com.hasasiero.tvstream.ui.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hasasiero.tvstream.data.remote.RemoteLog
 import com.hasasiero.tvstream.data.repository.ContentRepository
 import com.hasasiero.tvstream.domain.model.AnimeDetail
 import com.hasasiero.tvstream.domain.model.Episode
@@ -40,6 +41,7 @@ class DetailViewModel @Inject constructor(
                     isLoading = false,
                 )
             } catch (e: Exception) {
+                RemoteLog.e("Detail", "load $site/$animeId-$slug failed", e)
                 _state.value = DetailUiState(isLoading = false, error = e.message)
             }
         }

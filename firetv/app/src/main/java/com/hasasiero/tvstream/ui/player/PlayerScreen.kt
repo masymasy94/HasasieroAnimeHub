@@ -23,12 +23,14 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.ui.PlayerView
+import com.hasasiero.tvstream.data.remote.RemoteLog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -118,6 +120,7 @@ fun PlayerScreen(
     // Set media source when URL ready
     LaunchedEffect(state.videoUrl, state.videoType) {
         val url = state.videoUrl ?: return@LaunchedEffect
+        RemoteLog.i("Player", "ep $episodeId play ${state.videoType} $url")
         val mediaItem = MediaItem.fromUri(url)
         if (state.videoType == "m3u8") {
             val dataSourceFactory = DefaultHttpDataSource.Factory()
@@ -148,9 +151,16 @@ fun PlayerScreen(
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                val name = mapOf(1 to "IDLE", 2 to "BUFFERING", 3 to "READY", 4 to "ENDED")[playbackState]
+                RemoteLog.d("Player", "ep $episodeId state=$name pos=${player.currentPosition}/${player.duration}")
                 if (playbackState == Player.STATE_ENDED) {
                     videoEnded = true
                 }
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                RemoteLog.e("Player", "ep $episodeId playback error ${error.errorCodeName} " +
+                    "pos=${player.currentPosition} url=${state.videoUrl}", error)
             }
 
             // Nothing else holds the screen awake: without this the stick sleeps

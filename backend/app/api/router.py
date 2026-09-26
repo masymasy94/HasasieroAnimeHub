@@ -10,6 +10,7 @@ from .sites import router as sites_router
 from .tracked import router as tracked_router
 from .stream import router as stream_router
 from .ws import router as ws_router
+from .client_log import router as client_log_router
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(search_router, tags=["search"])
@@ -22,3 +23,4 @@ api_router.include_router(sites_router, tags=["sites"])
 api_router.include_router(tracked_router, tags=["tracked"])
 api_router.include_router(stream_router, tags=["stream"])
 api_router.include_router(ws_router, tags=["websocket"])
+api_router.include_router(client_log_router, tags=["client-log"])
