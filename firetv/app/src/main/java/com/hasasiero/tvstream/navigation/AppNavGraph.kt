@@ -77,15 +77,15 @@ fun AppNavGraph() {
                 animeId = route.animeId,
                 slug = route.slug,
                 site = route.site,
-                onPlayEpisode = { episodeId, epNumber, epTitle, coverUrl, _, _, _, _ ->
+                onPlayEpisode = { episodeId, epNumber, animeTitle, coverUrl, _, _, _, _ ->
                     navController.navigate(
                         Player(
                             episodeId = episodeId,
                             site = route.site,
-                            title = epTitle,
+                            title = "$animeTitle - EP $epNumber",
                             animeId = route.animeId,
                             animeSlug = route.slug,
-                            animeTitle = route.slug,
+                            animeTitle = animeTitle,
                             coverUrl = coverUrl ?: "",
                             episodeNumber = epNumber,
                         )

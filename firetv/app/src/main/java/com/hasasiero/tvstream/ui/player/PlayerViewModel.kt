@@ -76,6 +76,12 @@ class PlayerViewModel @Inject constructor(
         if (currentAnimeId == 0 || currentAnimeSlug.isEmpty()) return
         viewModelScope.launch {
             try {
+                // History saved by older builds used the slug as title: heal it on replay
+                if (currentAnimeTitle == currentAnimeSlug) {
+                    val realTitle = repository.getAnimeDetail(currentAnimeId, currentAnimeSlug, currentSourceSite.ifEmpty { "animeunity" }).title
+                    currentEpisodeTitle = currentEpisodeTitle?.replace(currentAnimeSlug, realTitle)
+                    currentAnimeTitle = realTitle
+                }
                 val resp = repository.getEpisodes(
                     animeId = currentAnimeId,
                     slug = currentAnimeSlug,
