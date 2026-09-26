@@ -166,6 +166,7 @@ fun PlayerScreen(
             // Nothing else holds the screen awake: without this the stick sleeps
             // mid-episode (no remote input for 20+ minutes) and playback stalls.
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                RemoteLog.d("Player", "ep $episodeId ${if (isPlaying) "play" else "pause"} pos=${player.currentPosition}")
                 view.keepScreenOn = isPlaying
             }
         }

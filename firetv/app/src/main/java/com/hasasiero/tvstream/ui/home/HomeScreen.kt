@@ -16,10 +16,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -49,6 +56,7 @@ fun HomeScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     val view = LocalView.current
+    val focusManager = LocalFocusManager.current
 
     // Force-close the IME before navigating away. Compose's keyboardController
     // alone isn't enough when a BasicTextField still owns the IME session, so
@@ -152,11 +160,21 @@ fun HomeScreen(
                                     singleLine = true,
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                     keyboardActions = KeyboardActions(onSearch = {
-                                        keyboardController?.hide()
+                                        forceHideKeyboard()
+                                        focusManager.moveFocus(FocusDirection.Down)
                                     }),
                                     modifier = Modifier
                                         .width(300.dp)
-                                        .focusRequester(searchFocusRequester),
+                                        .focusRequester(searchFocusRequester)
+                                        // A single-line field swallows D-pad down: without this
+                                        // the remote can never reach the search results.
+                                        .onPreviewKeyEvent {
+                                            if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
+                                                forceHideKeyboard()
+                                                focusManager.moveFocus(FocusDirection.Down)
+                                                true
+                                            } else false
+                                        },
                                     decorationBox = { inner ->
                                         Box(
                                             modifier = Modifier

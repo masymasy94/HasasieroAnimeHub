@@ -39,7 +39,9 @@ fun AppNavGraph() {
     val navController = rememberNavController()
     DisposableEffect(navController) {
         val listener = androidx.navigation.NavController.OnDestinationChangedListener { _, dest, args ->
-            RemoteLog.i("Nav", "-> ${dest.route} ${args?.keySet()?.associateWith { args.get(it) } ?: ""}")
+            val params = args?.keySet()?.filterNot { it.startsWith("android-support") }
+                ?.associateWith { args.get(it) }
+            RemoteLog.i("Nav", "-> ${dest.route?.substringAfterLast('.')?.substringBefore('/')} ${params ?: ""}")
         }
         navController.addOnDestinationChangedListener(listener)
         onDispose { navController.removeOnDestinationChangedListener(listener) }
