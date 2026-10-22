@@ -19,6 +19,9 @@ class _Provider:
             raise RuntimeError("boom")
         return list(self._results)
 
+    async def get_latest(self):
+        return list(self._results)
+
 
 class _Registry:
     def all_providers(self):
@@ -45,6 +48,26 @@ def test_search_default_still_streams_sse_for_the_web_ui():
     r = client.get("/api/search", params={"title": "lara"})
     assert r.headers["content-type"].startswith("text/event-stream")
     assert "event: done" in r.text
+
+
+def test_latest_drops_same_anime_listed_twice():
+    # AnimeWorld /updated lists episodes: Ep 11 + Ep 12 = same anime twice,
+    # and a duplicate LazyRow key crashes the Fire TV app at startup.
+    daima = AnimeSearchResult(id=9544988, slug="dragon-ball-daima-ita.muo1Y", title="Daima")
+
+    class _Dup:
+        def all_providers(self):
+            return [_Provider("animeworld", [daima, daima.model_copy()]),
+                    _Provider("animeunity", [daima.model_copy()])]
+
+    app.dependency_overrides[get_provider_registry] = lambda: _Dup()
+    try:
+        r = client.get("/api/latest")
+    finally:
+        app.dependency_overrides[get_provider_registry] = lambda: _Registry()
+    assert [(x["id"], x["source_site"]) for x in r.json()["results"]] == [
+        (9544988, "animeworld"), (9544988, "animeunity"),
+    ]
 
 
 def test_client_log_lands_in_server_log(caplog):

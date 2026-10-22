@@ -109,9 +109,9 @@ async def latest_anime(
 
     all_results = await asyncio.gather(*[_latest_one(p) for p in providers])
 
-    merged = []
-    for results in all_results:
-        merged.extend(results)
+    # Dedupe on the Fire TV list key: AnimeWorld /updated lists episodes, so
+    # an anime with two new episodes shows up twice and crashes the app.
+    merged = list({(r.id, r.source_site): r for results in all_results for r in results}.values())
 
     _latest_cache = merged
     _latest_cache_ts = now
