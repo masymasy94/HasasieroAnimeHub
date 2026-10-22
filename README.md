@@ -50,7 +50,7 @@ Native Android TV app (`firetv/`) built with Jetpack Compose and Media3/ExoPlaye
 
 | Site | Search | Stream | Download |
 |------|--------|--------|----------|
-| [AnimeUnity](https://www.animeunity.so) | Yes | Yes | Yes |
+| [AnimeUnity](https://www.animeunity.co) | Yes | Yes | Yes |
 | [AnimeWorld](https://www.animeworld.ac) | Yes | Yes | Yes |
 | [AnimeSaturn](https://www.animesaturn.cx) | Yes | Yes | Yes |
 

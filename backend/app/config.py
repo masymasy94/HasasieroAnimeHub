@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:////data/animeunity.db"
     download_dir: str = "/downloads"
     max_concurrent_downloads: int = 2
-    animeunity_domain: str = "www.animeunity.so"
+    animeunity_domain: str = "www.animeunity.co"
     log_level: str = "INFO"
     impersonate_browser: str = "chrome"
     static_dir: str = "static"  # Path to built frontend assets
