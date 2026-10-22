@@ -3,6 +3,7 @@ import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from .metadata_service import MetadataService
 from .providers import ProviderRegistry
@@ -352,6 +353,7 @@ class DownloadWorker:
         try:
             # Fetch master playlist
             response = await session.get(source.url, headers=headers)
+            response.raise_for_status()
             playlist = m3u8.loads(response.text, uri=source.url)
 
             # Select best quality
@@ -361,6 +363,7 @@ class DownloadWorker:
                     key=lambda p: p.stream_info.bandwidth or 0,
                 )
                 response = await session.get(best.absolute_uri, headers=headers)
+                response.raise_for_status()
                 playlist = m3u8.loads(response.text, uri=best.absolute_uri)
 
             segments = playlist.segments
@@ -413,10 +416,18 @@ class DownloadWorker:
     async def _download_segment(
         session, url: str, headers: dict
     ) -> bytes:
-        """Download a single HLS segment with retry."""
+        """Download a single HLS segment with retry.
+
+        A 5xx body is an error page, not video: it fails the attempt instead of landing
+        in the .ts. Each retry moves to the next vixcloud edge, because a 503 there means
+        that host is rate-limiting us for minutes (see EDGE_HOSTS in api/stream.py).
+        """
+        from ..api.stream import EDGE_HOSTS  # lazy: api.stream -> deps -> this module
+
         for attempt in range(1, MAX_SEGMENT_RETRIES + 1):
             try:
                 response = await session.get(url, headers=headers)
+                response.raise_for_status()
                 return response.content
             except Exception as exc:
                 if attempt < MAX_SEGMENT_RETRIES:
@@ -426,6 +437,10 @@ class DownloadWorker:
                         MAX_SEGMENT_RETRIES,
                         exc,
                     )
+                    parts = urlsplit(url)
+                    if parts.hostname in EDGE_HOSTS:
+                        i = EDGE_HOSTS.index(parts.hostname)
+                        url = urlunsplit(parts._replace(netloc=EDGE_HOSTS[(i + 1) % len(EDGE_HOSTS)]))
                     await asyncio.sleep(SEGMENT_RETRY_DELAY)
                 else:
                     raise
